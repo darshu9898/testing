@@ -1,12 +1,13 @@
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+@import "tailwindcss";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+/* === Base Theme Setup === */
 body {
-  font-family: Arial, sans-serif;
-    background-color: #F8F0E1;
-
-  color: #1e1e1e;
+  background-color: #121212; /* Dark gray background */
+  color: #e0e0e0;            /* Soft white text */
+  font-family: 'Inter', sans-serif;
 }
-
