@@ -1,10 +1,15 @@
+import About from '@/components/About';
+import { ButtonDemo } from '@/components/Button';
 import Carousel, { MyCarousel } from '@/components/Carousel';
 import Navbar from '@/components/NavBar';
+import { Link } from 'lucide-react';
 import Head from 'next/head';
 import Image from 'next/image';
+import { Router, useRouter } from 'next/router';
 
 
 export default function Home() {
+  const router = useRouter();
   return (
     <>
       <Navbar />
@@ -19,14 +24,20 @@ export default function Home() {
             Trusted by <span className='font-bold'>10 Lakhs+</span>
             <p className='font-bold'>Indian Men</p>
           </div>
+
+        <ButtonDemo
+          label="Shop Now"
+          bgColor="white"
+          onClick={() => router.push('/products')}
+        />
         </div>
 
         {/* Right side carousel */}
         <div className='flex-1 w-full md:w-auto'>
           <MyCarousel />
         </div>
-
       </div>
+      <About />
       
     </>
   )
