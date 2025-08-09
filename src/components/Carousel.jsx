@@ -63,7 +63,7 @@ export function MyCarousel() {
   }, [emblaApi]);
 
   return (
-    <div className="bg-[#2F674A] md:pl-180 md:pr-20">
+    <div className="bg-[#2F674A] md:pl-10 md:pr-10">
       <div
         className="relative max-w-3xl mx-auto overflow-hidden"
         ref={emblaRef}
