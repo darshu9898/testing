@@ -6,7 +6,7 @@ export default function Home() {
   return (
     <div className="mt-4">
       <h1 className="text-4xl font-bold underline">
-        Tailwind IntelliSense Done1
+        Tailwind IntelliSense Test
       </h1>
     </div>
   )
