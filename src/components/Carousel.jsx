@@ -72,13 +72,15 @@ export function MyCarousel() {
         <div className="flex">
           {images.map((img, index) => (
             <div key={index} className="min-w-full p-1">
-              <Image
-                alt={`Slide ${index + 1}`}
-                src={img}
-                width={400}
-                height={700}
-                className="w-full h-auto md:h-90 object-cover rounded-md"
-              />
+            <Image
+              alt={`Slide ${index + 1}`}
+              src={img}
+              width={400}
+              height={700}
+              className="w-full h-auto md:h-[360px] rounded-md object-contain"
+              style={{ objectFit: 'contain' }}
+            />
+
             </div>
           ))}
         </div>
