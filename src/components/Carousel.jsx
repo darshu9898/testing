@@ -86,22 +86,26 @@ export function MyCarousel() {
         </div>
 
         {/* Left arrow - only visible on md+ */}
+        {/* Left arrow */}
+        {/* Left arrow */}
         <button
           onClick={scrollPrev}
           aria-label="Previous Slide"
-          className="hidden md:flex absolute top-1/2 left-2 -translate-y-1/2 bg-black bg-opacity-40 hover:bg-opacity-70 text-white rounded-full w-10 h-10 items-center justify-center z-10"
+          className="hidden md:flex absolute top-1/2 left-2 -translate-y-1/2 bg-black bg-opacity-40 hover:bg-[#232221] text-white rounded-full w-10 h-10 items-center justify-center z-10 cursor-pointer transition-colors duration-300 ease-in-out"
         >
           ‹
         </button>
 
-        {/* Right arrow - only visible on md+ */}
+        {/* Right arrow */}
         <button
           onClick={scrollNext}
           aria-label="Next Slide"
-          className="hidden md:flex absolute top-1/2 right-2 -translate-y-1/2 bg-black bg-opacity-40 hover:bg-opacity-70 text-white rounded-full w-10 h-10 items-center justify-center z-10"
+          className="hidden md:flex absolute top-1/2 right-2 -translate-y-1/2 bg-black bg-opacity-40 hover:bg-[#232221] text-white rounded-full w-10 h-10 items-center justify-center z-10 cursor-pointer transition-colors duration-300 ease-in-out"
         >
           ›
         </button>
+
+
 
         {/* Dots container */}
         <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2  bg-opacity-40 px-3 py-1 rounded-full">
