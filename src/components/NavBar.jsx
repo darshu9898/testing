@@ -52,7 +52,7 @@ function getTransform(index) {
   const cartActiveClass = router.pathname === "/cart" ? "bg-[#2F674A] text-white" : "";
 
   return (
-    <nav className="bg-[#F8F0E1] fixed top-0 w-full z-50 shadow-md">
+    <nav className="bg-[#F8F0E1] fixed top-0 w-full z-50 shadow-lg">
       <div className="max-w-7xl mx-auto px-4 flex items-center justify-between h-16">
         {/* Mobile Left: User & Cart */}
         <div className="flex items-center gap-4 md:hidden">
