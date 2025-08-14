@@ -7,3 +7,26 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+model Users {
+
+  userId    Int   @id @default(autoincrement())
+  userName  String
+  userEmail String @unique
+  userPhone Int?
+  userPassword String
+  userAddress String?
+  created_at DateTime @default(now())
+
+  //Relations
+  Orders Orders[]
+  Cart Cart[]
+  Payments Payments[]
+  Reviews Reviews[]
+
+}
+
+model Product {
+
+  
+}
