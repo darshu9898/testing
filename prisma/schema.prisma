@@ -9,7 +9,7 @@ datasource db {
 }
 
 model Users {
-  userId       Int       @id @default(autoincrement())
+  userId       Int       @id @default(autoincrement())        //@id is primary key
   userName     String
   userEmail    String    @unique
   userPhone    Int?
@@ -101,7 +101,8 @@ model Payments {
   order Orders @relation(fields: [orderId], references: [orderId])
 }
 
-model Categories {
+model Category {
   categoryId   Int    @id @default(autoincrement())
   categoryName String
 }
+
