@@ -29,7 +29,7 @@ model Products {
   productName        String
   productDescription String
   productPrice       Int
-  productQty         Int
+  productStock       Int
   productImage       String?
   created_at         DateTime       @default(now())
 
@@ -55,7 +55,7 @@ model Cart {
   cartId          Int       @id @default(autoincrement())
   productId       Int
   userId          Int
-  productQuantity Int
+  quantity        Int
 
   // Relations
   user    Users    @relation(fields: [userId], references: [userId])
@@ -66,7 +66,7 @@ model OrderDetails {
   orderDetailId   Int       @id @default(autoincrement())
   orderId         Int
   productId       Int
-  productQuantity Int
+  quantity        Int
   productPrice    Int
 
   // Relations
