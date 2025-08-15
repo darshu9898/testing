@@ -54,12 +54,16 @@ model Orders {
 model Cart {
   cartId          Int       @id @default(autoincrement())
   productId       Int
-  userId          Int
+  userId          Int?
+  sessionId       String? // For guests carts (set via cookies)
   quantity        Int
 
   // Relations
   user    Users    @relation(fields: [userId], references: [userId])
   product Products @relation(fields: [productId], references: [productId])
+
+  @@unique([userId, productId], map: "unique_user_cart_item")
+  @@unique([sessionId, productId], map: "unique_guest_cart_item")
 }
 
 model OrderDetails {
