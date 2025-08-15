@@ -13,7 +13,7 @@ model Users {
   userName     String
   userEmail    String    @unique
   userPhone    Int?
-  userPassword String
+  userPassword String?
   userAddress  String?
   created_at   DateTime  @default(now())
 

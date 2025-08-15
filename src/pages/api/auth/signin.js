@@ -1,61 +1,44 @@
 import { getProviders, signIn } from "next-auth/react";
-import { useState } from "react";
 
 export default function SignIn({ providers }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-
   return (
-    <div style={{ maxWidth: "400px", margin: "auto", padding: "2rem" }}>
+    <div style={{ textAlign: "center", padding: "50px" }}>
       <h1>Sign In</h1>
 
-      {/* ---------- Email/Password Form ---------- */}
+      {/* Email & Password Form */}
       <form
-        onSubmit={async (e) => {
+        onSubmit={(e) => {
           e.preventDefault();
-          await signIn("credentials", { email, password, callbackUrl: "/" });
+          const email = e.target.email.value;
+          const password = e.target.password.value;
+          signIn("credentials", { email, password, callbackUrl: "/" });
         }}
       >
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          style={{ display: "block", marginBottom: "1rem", width: "100%" }}
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          style={{ display: "block", marginBottom: "1rem", width: "100%" }}
-        />
-        <button type="submit" style={{ width: "100%" }}>Sign in</button>
+        <input name="email" type="email" placeholder="Email" required />
+        <br />
+        <input name="password" type="password" placeholder="Password" required />
+        <br />
+        <button type="submit">Sign In with Email</button>
       </form>
 
-      <hr style={{ margin: "2rem 0" }} />
+      <hr />
 
-      {/* ---------- Google Login Buttons ---------- */}
+      {/* Google Sign In */}
       {providers &&
-        Object.values(providers)
-          .filter((provider) => provider.name !== "Credentials")
-          .map((provider) => (
-            <div key={provider.name} style={{ marginBottom: "1rem" }}>
-              <button
-                onClick={() => signIn(provider.id, { callbackUrl: "/" })}
-                style={{ width: "100%" }}
-              >
-                Sign in with {provider.name}
+        Object.values(providers).map((provider) =>
+          provider.name === "Google" ? (
+            <div key={provider.name}>
+              <button onClick={() => signIn(provider.id, { callbackUrl: "/" })}>
+                Sign In with Google
               </button>
             </div>
-          ))}
+          ) : null
+        )}
     </div>
   );
 }
 
-// Fetch available providers server-side
+// Fetch providers server-side
 export async function getServerSideProps() {
   const providers = await getProviders();
   return {
