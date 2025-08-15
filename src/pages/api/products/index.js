@@ -1,3 +1,4 @@
+// src/pages/api/products/index.js
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -6,24 +7,24 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'GET') {
    
-      const products = await prisma.product.findMany();
+      const products = await prisma.products.findMany();
       return res.status(200).json(products);
     }
 
     if (req.method === 'POST') {
-      const { productName, productDescription = '', productPrice, produtQty = 0, productImage = null } = req.body;
+      const { Name, Description = '', Price, Stock = 0, Image = null } = req.body;
 
       // Prevent rejecting price = 0, ensure valid number
-      if (!productName || productPrice == null || isNaN(productPrice)) {
+      if (!Name || Price == null || isNaN(Price)) {
         return res.status(400).json({ error: 'Name and valid price are required' });
       }
 
-      const newProduct = await prisma.product.create({
+      const newProduct = await prisma.products.create({
         data: {
           productName: Name,
           productDescription: Description || '',
           productPrice: parseFloat(Price),
-          productQty: parseInt(Stock),
+          productStock: parseInt(Stock),
           productImage: Image
         }
       });
