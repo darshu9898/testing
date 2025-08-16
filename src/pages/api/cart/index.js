@@ -27,77 +27,15 @@ export default async function handler(req, res) {
         product: r.product,
         itemTotal: r.product.productPrice * r.quantity,
       }));
-      const grandTotal = items.reduce((s, it) => s + it.itemTotal, 0);
+
+      const grandTotal = items.reduce((sum, it) => sum + it.itemTotal, 0);
 
       return res.status(200).json({ items, grandTotal });
     }
 
-    // ---------------- ADD / BULK SYNC CART ----------------
+    // ---------------- ADD SINGLE ITEM ----------------
     if (req.method === 'POST') {
-      const { productId, quantity = 1, cartItems } = req.body;
-
-      // BULK SYNC MODE
-      if (Array.isArray(cartItems)) {
-        const results = [];
-
-        //  $transaction cannot take an async callback with for-of inside.
-        // Use map + prisma.$transaction([...]) pattern
-        const txResults = await prisma.$transaction(
-          cartItems.map(async it => {
-            const pId = parseInt(it.productId, 10);
-            const addQty = Math.max(1, parseInt(it.quantity || 1, 10));
-
-            const product = await prisma.products.findUnique({ where: { productId: pId } });
-            if (!product) return { productId: pId, error: 'Product not found' };
-
-            const existing = await prisma.cart.findFirst({
-              where: { productId: pId, ...(userId ? { userId } : { sessionId }) },
-            });
-
-            if (existing) {
-              const desired = existing.quantity + addQty;
-              if (desired > product.productStock)
-                return { productId: pId, error: `Only ${product.productStock} available` };
-
-              const updated = await prisma.cart.update({
-                where: { cartId: existing.cartId },
-                data: { quantity: desired },
-              });
-              return { action: 'updated', item: updated };
-            } else {
-              if (addQty > product.productStock)
-                return { productId: pId, error: `Only ${product.productStock} available` };
-
-              const created = await prisma.cart.create({
-                data: {
-                  productId: pId,
-                  quantity: addQty,
-                  ...(userId ? { userId } : { sessionId }),
-                },
-              });
-              return { action: 'created', item: created };
-            }
-          })
-        );
-
-        // enrich with product info
-        const enriched = await Promise.all(
-          txResults.map(async r => {
-            if (r.item?.cartId) {
-              const withProduct = await prisma.cart.findUnique({
-                where: { cartId: r.item.cartId },
-                include: { product: true },
-              });
-              return { ...r, item: withProduct };
-            }
-            return r;
-          })
-        );
-
-        return res.status(200).json({ results: enriched });
-      }
-
-      // SINGLE ITEM MODE
+      const { productId, quantity = 1 } = req.body;
       if (!productId) return res.status(400).json({ error: 'productId required' });
 
       const pId = parseInt(productId, 10);
