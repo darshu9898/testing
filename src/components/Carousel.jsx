@@ -104,9 +104,7 @@ export function MyCarousel() {
         >
           ›
         </button>
-
-
-
+        
         {/* Dots container */}
         <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2  bg-opacity-40 px-3 py-1 rounded-full">
           {images.map((_, index) => (
