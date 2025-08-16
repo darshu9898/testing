@@ -6,14 +6,15 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Users {
-  userId       Int       @id @default(autoincrement())        //@id is primary key
+  userId       Int       @id @default(autoincrement())
+  supabaseId   String?   @unique
   userName     String
-  userEmail    String    @unique
+  userEmail    String   @unique
   userPhone    Int?
-  userPassword String
   userAddress  String?
   created_at   DateTime  @default(now())
 
@@ -29,7 +30,7 @@ model Products {
   productName        String         @unique
   productDescription String
   productPrice       Int
-  productQty         Int
+  productStock       Int
   productImage       String?
   created_at         DateTime       @default(now())
 
@@ -54,19 +55,23 @@ model Orders {
 model Cart {
   cartId          Int       @id @default(autoincrement())
   productId       Int
-  userId          Int
-  productQuantity Int
+  userId          Int?
+  sessionId       String? // For guests carts (set via cookies)
+  quantity        Int
 
   // Relations
-  user    Users    @relation(fields: [userId], references: [userId])
+  user    Users?    @relation(fields: [userId], references: [userId])
   product Products @relation(fields: [productId], references: [productId])
+
+  @@unique([userId, productId], map: "unique_user_cart_item")
+  @@unique([sessionId, productId], map: "unique_guest_cart_item")
 }
 
 model OrderDetails {
   orderDetailId   Int       @id @default(autoincrement())
   orderId         Int
   productId       Int
-  productQuantity Int
+  quantity        Int
   productPrice    Int
 
   // Relations
@@ -86,15 +91,15 @@ model Reviews {
 }
 
 model Payments {
-  paymentId        Int       @id @default(autoincrement())
-  userId           Int
-  orderId          Int
-  razorpayOrderId  String
+  paymentId         Int       @id @default(autoincrement())
+  userId            Int
+  orderId           Int
+  razorpayOrderId   String
   razorpayPaymentId String?  // Filled after payment is successful
-  paymentMode      String
-  paymentStatus    String
-  paymentDate      DateTime @default(now())
-  paymentAmount    Int
+  paymentMode       String
+  paymentStatus     String
+  paymentDate       DateTime @default(now())
+  paymentAmount     Int
 
   // Relations
   user  Users  @relation(fields: [userId], references: [userId])
@@ -105,4 +110,3 @@ model Category {
   categoryId   Int    @id @default(autoincrement())
   categoryName String
 }
-
