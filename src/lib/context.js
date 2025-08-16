@@ -1,8 +1,9 @@
-// context.js
 import { getServerSession } from "next-auth";
 import { authOptions } from "../pages/api/auth/[...nextauth]";
 
-export async function handler(req, res) {
+export async function getContext(req, res) {
   const session = await getServerSession(req, res, authOptions);
-  console.log(session?.user); // includes id, name, email
+  const userId = session?.user?.id || null;
+  const sessionId = req.cookies?.sessionId || null;
+  return { userId, sessionId };
 }
