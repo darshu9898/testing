@@ -1,43 +1,23 @@
-import { supabase } from "./supabase";
-import prisma from "./prisma";
-import { getOrSetSessionId } from "./session";
+import { randomUUID } from "crypto";
+import cookie from "cookie";
 
-export async function getContext(req, res) {
-  // Ensure a sessionId exists for guests
-  const sessionId = getOrSetSessionId(req, res);
+export function getOrSetSessionId(req, res) {
+  // Try cookies first
+  const cookies = req.headers?.cookie ? cookie.parse(req.headers.cookie) : {};
+  let sessionId = cookies?.sessionId || null;
 
-  // Try to read Supabase session token (cookie-based)
-  const accessToken = req.cookies?.["sb-access-token"] || null;
-
-  let supabaseUser = null;
-  let userId = null; // your internal Users.userId
-
-  if (accessToken) {
-    try {
-      const { data } = await supabase.auth.getUser(accessToken);
-      supabaseUser = data?.user || null;
-    } catch (err) {
-      supabaseUser = null;
-    }
-  }
-
-  if (supabaseUser) {
-    // Upsert user in Prisma by supabaseId
-    const upserted = await prisma.users.upsert({
-      where: { supabaseId: supabaseUser.id },
-      update: {
-        userEmail: supabaseUser.email,
-        userName: supabaseUser.user_metadata?.full_name || supabaseUser.email || "User",
-      },
-      create: {
-        supabaseId: supabaseUser.id,
-        userEmail: supabaseUser.email,
-        userName: supabaseUser.user_metadata?.full_name || supabaseUser.email || "User",
-      },
+  if (!sessionId) {
+    sessionId = randomUUID();
+    // Set cookie for 30 days
+    const cookieStr = cookie.serialize("sessionId", sessionId, {
+      httpOnly: true,
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+      sameSite: "lax",
     });
-
-    userId = upserted.userId;
+    // In Next.js API routes / getServerSideProps you can set header
+    if (res && res.setHeader) res.setHeader("Set-Cookie", cookieStr);
   }
 
-  return { userId, sessionId, supabaseUser };
+  return sessionId;
 }
