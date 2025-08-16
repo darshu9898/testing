@@ -17,7 +17,7 @@ export default async function handler(req, res) {
 
     const updatedProduct = await prisma.products.update({
       where: { productId: parseInt(id) },
-      data: { productQty: parseInt(Stock) }
+      data: { productStock: parseInt(Stock) }
     });
 
     return res.status(200).json(updatedProduct);
