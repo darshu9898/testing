@@ -1,4 +1,4 @@
-// pages/api/products/[id]/stock.js
+// pages/api/products/stock.js
 import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 

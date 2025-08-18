@@ -1,42 +1,51 @@
 // src/pages/api/cart/[id].js
-import { getContext } from '@/lib/getContext';
+// Treat [id] as productId instead of cartId
 import prisma from '@/lib/prisma';
 
 export default async function handler(req, res) {
   try {
-    // getContext is async
-    const { userId, sessionId } = await getContext(req, res);
+    // get userId from query for now (since you don’t want getContext)
+    const { userId, sessionId } = req.query;
+    const productId = parseInt(req.query.id, 10); // [id] is productId
 
     if (!userId && !sessionId) {
       return res.status(401).json({ error: 'Authentication required (userId or sessionId)' });
     }
-
-    const cartId = parseInt(req.query.id, 10);
-    if (!cartId) return res.status(400).json({ error: 'Cart id required' });
-
-    // find cart item
-    const existing = await prisma.cart.findUnique({ where: { cartId } });
-    if (!existing) return res.status(404).json({ error: 'Cart item not found' });
-
-    const isOwner = userId ? existing.userId === userId : existing.sessionId === sessionId;
-    if (!isOwner) return res.status(403).json({ error: 'Not allowed' });
+    if (!productId) {
+      return res.status(400).json({ error: 'Product id required' });
+    }
 
     // ---------------- PATCH: update quantity ----------------
     if (req.method === 'PATCH') {
       const { quantity, delta } = req.body;
 
       const product = await prisma.products.findUnique({
-        where: { productId: existing.productId },
+        where: { productId },
       });
       if (!product) return res.status(404).json({ error: 'Product not found' });
 
+      // Find cart row for this user/session and product
+      const existing = await prisma.cart.findFirst({
+        where: userId
+          ? { userId: parseInt(userId, 10), productId }
+          : { sessionId, productId },
+      });
+
+      if (!existing) {
+        return res.status(404).json({ error: 'Cart item not found' });
+      }
+
       let newQty;
-      if (typeof quantity !== 'undefined') newQty = parseInt(quantity, 10);
-      else if (typeof delta !== 'undefined') newQty = existing.quantity + parseInt(delta, 10);
-      else return res.status(400).json({ error: 'Provide quantity or delta in body' });
+      if (typeof quantity !== 'undefined') {
+        newQty = parseInt(quantity, 10);
+      } else if (typeof delta !== 'undefined') {
+        newQty = existing.quantity + parseInt(delta, 10);
+      } else {
+        return res.status(400).json({ error: 'Provide quantity or delta in body' });
+      }
 
       if (newQty <= 0) {
-        await prisma.cart.delete({ where: { cartId } });
+        await prisma.cart.delete({ where: { cartId: existing.cartId } });
         return res.status(200).json({ action: 'deleted', message: 'Item removed from cart' });
       }
 
@@ -45,22 +54,28 @@ export default async function handler(req, res) {
       }
 
       const updated = await prisma.cart.update({
-        where: { cartId },
+        where: { cartId: existing.cartId },
         data: { quantity: newQty },
-      });
-
-      const itemWithProduct = await prisma.cart.findUnique({
-        where: { cartId: updated.cartId },
         include: { product: true },
       });
 
-      return res.status(200).json({ action: 'updated', item: itemWithProduct });
+      return res.status(200).json({ action: 'updated', item: updated });
     }
 
     // ---------------- DELETE: remove item ----------------
     if (req.method === 'DELETE') {
-      await prisma.cart.delete({ where: { cartId } });
-      return res.status(200).json({ action: 'deleted', cartId });
+      const existing = await prisma.cart.findFirst({
+        where: userId
+          ? { userId: parseInt(userId, 10), productId }
+          : { sessionId, productId },
+      });
+
+      if (!existing) {
+        return res.status(404).json({ error: 'Cart item not found' });
+      }
+
+      await prisma.cart.delete({ where: { cartId: existing.cartId } });
+      return res.status(200).json({ action: 'deleted', productId });
     }
 
     return res.status(405).json({ error: 'Method not allowed' });
