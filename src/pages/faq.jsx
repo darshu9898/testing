@@ -295,7 +295,7 @@ export default function Faq() {
                 />
                 <ButtonDemo 
                   label="Call Us: 1800-123-4567" 
-                  bgColor="black" 
+                  bgColor="black" a
                   onClick={() => window.open('tel:18001234567')} 
                 />
               </div>
