@@ -1,88 +1,98 @@
-// lib/getContext.js
-import { createServerClient } from '@supabase/ssr';
-import prisma from './prisma';
-import { getOrSetSessionId } from './session';
+import { createSupabaseServerClient } from './supabase-server'
+import prisma from './prisma'
+import { getOrSetSessionId } from './session'
 
 /**
- * getContext(req, res)
- * returns: { user, userId, sessionId, accessToken, supabase }
- *
- * - user: supabase user object (or null)
- * - userId: your internal numeric Users.userId (or null for guests)
- * - sessionId: guest session UUID cookie (always present, for guests)
- * - accessToken: supabase access token string (or null)
- * - supabase: server-bound supabase client (if you need it)
+ * Secure context getter with cookie-based session management
+ * Returns: { user, userId, sessionId, accessToken, supabase, isAuthenticated }
  */
 export async function getContext(req, res) {
-  // 1) ensure guest sessionId exists (this will set cookie if missing)
-  //    getOrSetSessionId should return the sessionId (and set cookie in res when needed).
-  const sessionId = getOrSetSessionId(req, res);
+  // 1) Ensure guest sessionId exists (HttpOnly cookie)
+  const sessionId = getOrSetSessionId(req, res)
 
-  // 2) create a server-bound Supabase client that reads cookies from req
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    {
-      // provide a minimal cookie getter so the client reads auth cookies
-      cookies: {
-        get(name) {
-          return req.cookies ? req.cookies[name] : undefined;
-        },
-      },
-    }
-  );
+  // 2) Create server-bound Supabase client with secure cookie handling
+  const supabase = createSupabaseServerClient(req, res)
 
-  // 3) Try to read Supabase session & user (if logged in)
-  let supabaseUser = null;
-  let accessToken = null;
+  // 3) Try to get Supabase session (Supabase handles JWT verification internally)
+  let supabaseUser = null
+  let accessToken = null
+  
   try {
-    const { data } = await supabase.auth.getSession();
-    const session = data?.session ?? null;
-    supabaseUser = session?.user ?? null;
-    accessToken = session?.access_token ?? null;
+    const { data: { session }, error } = await supabase.auth.getSession()
+    
+    if (error) {
+      console.error('Supabase auth error:', error.message)
+      // Clear potentially corrupted auth cookies
+      await supabase.auth.signOut()
+    } else if (session) {
+      supabaseUser = session.user
+      accessToken = session.access_token
+      
+      // Auto-refresh token if it's close to expiring (within 5 minutes)
+      const expiresAt = session.expires_at * 1000
+      const fiveMinutes = 5 * 60 * 1000
+      
+      if (expiresAt - Date.now() < fiveMinutes) {
+        try {
+          const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession()
+          if (refreshError) {
+            console.error('Token refresh failed:', refreshError.message)
+            await supabase.auth.signOut()
+            supabaseUser = null
+            accessToken = null
+          } else if (refreshData.session) {
+            supabaseUser = refreshData.session.user
+            accessToken = refreshData.session.access_token
+          }
+        } catch (refreshErr) {
+          console.error('Token refresh error:', refreshErr)
+          supabaseUser = null
+          accessToken = null
+        }
+      }
+    }
   } catch (err) {
-    console.error('supabase.auth.getSession error:', err);
-    supabaseUser = null;
-    accessToken = null;
+    console.error('Session retrieval error:', err)
+    supabaseUser = null
+    accessToken = null
   }
 
-  // 4) If Supabase user exists, upsert into Prisma Users and return internal numeric userId
-  let userId = null; // numeric id from your Users table (Users.userId)
+  // 4) Upsert user in Prisma if authenticated (based on your Users schema)
+  let userId = null
   if (supabaseUser) {
     try {
-      // prisma.users.upsert expects the model name in lowercase (users). Matches your schema Users model.
       const upserted = await prisma.users.upsert({
-        where: { supabaseId: supabaseUser.id }, // supabaseId must be UNIQUE in your schema
+        where: { supabaseId: supabaseUser.id },
         update: {
           userEmail: supabaseUser.email,
-          userName: supabaseUser.user_metadata?.full_name || supabaseUser.email || 'User',
-          // keep updatedAt if you have it in schema; otherwise omit
-          updatedAt: new Date(),
+          userName: supabaseUser.user_metadata?.full_name || 
+                   supabaseUser.user_metadata?.name || 
+                   supabaseUser.email || 
+                   'User',
+          // Update timestamp handled by Prisma if you add updatedAt field
         },
         create: {
           supabaseId: supabaseUser.id,
           userEmail: supabaseUser.email,
-          userName: supabaseUser.user_metadata?.full_name || supabaseUser.email || 'User',
+          userName: supabaseUser.user_metadata?.full_name || 
+                   supabaseUser.user_metadata?.name || 
+                   supabaseUser.email || 
+                   'User',
         },
-      });
-
-      // your Prisma Users model uses userId as the PK (see schema). Pull that.
-      userId = upserted.userId ?? upserted.id ?? null;
+      })
+      userId = upserted.userId
     } catch (e) {
-      console.error('Prisma users.upsert error:', e);
-      // don't throw — keep userId null so caller can decide how to handle
-      userId = null;
+      console.error('Prisma user upsert error:', e)
+      userId = null
     }
   }
 
-  // 5) If not logged in, sessionId from getOrSetSessionId will be used by callers.
-  //    Note: getOrSetSessionId already created or returned the cookie; we returned it above.
-
   return {
     user: supabaseUser,
-    userId,        // numeric internal id (null for guests)
-    sessionId,     // guest session cookie id (always present)
-    accessToken,   // supabase access token (JWT) or null
-    supabase,      // server-bound supabase client
-  };
+    userId,
+    sessionId,
+    accessToken,
+    supabase,
+    isAuthenticated: !!supabaseUser
+  }
 }

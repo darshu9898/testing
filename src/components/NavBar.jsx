@@ -1,224 +1,261 @@
-'use client';
-
-import React, { useState } from "react";
+"use client";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/router";
-
-const buttons = [
-  { name: "home", href: "/", label: "Home" },
-  { name: "products", href: "/products", label: "Products" },
-  { name: "contact", href: "/contact", label: "Contact" },
-  { name: "faq", href: "/faq", label: "FAQ" },
-];
-
-const shiftAmount = 20; // px shift on hover for buttons
+import { useRouter } from "next/router"; // if you're on the App Router, switch to next/navigation
+import { useAuth } from "@/hooks/useAuth";
+import { ButtonDemo } from "./Button";
+import {
+  ShoppingCart,
+  Menu,
+  X,
+  ChevronDown,
+} from "lucide-react";
 
 export default function Navbar() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [cartCount, setCartCount] = useState(0);
+
+  const { user, signOut, loading } = useAuth();
   const router = useRouter();
-  const [hovered, setHovered] = useState(null);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const greenBg = "#2F674A";
 
-  // Button transform for hover effect
-function getTransform(index) {
-  // If hovered is null OR hovered is 'cart', don't shift any center button
-  if (hovered === null || hovered === 'cart') return "translateX(0)";
-  const hoveredIndex = buttons.findIndex((b) => b.name === hovered);
-  if (index === hoveredIndex) return "translateX(0) scale(1.1)";
-  if (index < hoveredIndex) return `translateX(-${shiftAmount}px) scale(0.9)`;
-  if (index > hoveredIndex) return `translateX(${shiftAmount}px) scale(0.9)`;
-  return "translateX(0)";
-}
+  // Handle scroll effect (safe on client only)
+  useEffect(() => {
+    const handleScroll = () => {
+      if (typeof window !== "undefined") {
+        setIsScrolled(window.scrollY > 10);
+      }
+    };
+    handleScroll();
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
-  // Button classes with bg/text color
-  function getClasses(href, name) {
-    const isActive = router.pathname === href;
-    const isHovered = hovered === name;
+  // Fetch cart count
+  useEffect(() => {
+    const fetchCartCount = async () => {
+      try {
+        const response = await fetch("/api/cart", { credentials: "include" });
+        if (response.ok) {
+          const data = await response.json();
+          setCartCount(data.items?.length || 0);
+        }
+      } catch (error) {
+        console.error("Failed to fetch cart count:", error);
+      }
+    };
 
-    const bgClass = isActive
-      ? "bg-[#2F674A] text-white"
-      : isHovered
-      ? "bg-[#DDE6D9] text-black"
-      : "text-black hover:bg-[#E6F0E8]";
+    fetchCartCount();
+    const interval = setInterval(fetchCartCount, 30000); // Update every 30 seconds
+    return () => clearInterval(interval);
+  }, [user]);
 
-    return `px-4 py-2 rounded-md font-medium cursor-pointer flex items-center justify-center transition-all duration-300 ease-in-out ${bgClass}`;
-  }
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      setShowUserMenu(false);
+      setCartCount(0);
+    } catch (error) {
+      console.error("Sign out error:", error);
+    }
+  };
 
-  // Cart icon classes with hover effect like nav buttons
-  const isCartHovered = hovered === 'cart';
-  const cartBgClass = isCartHovered
-    ? "bg-[#DDE6D9] text-black"
-    : "text-black hover:bg-[#E6F0E8]";
-  const cartActiveClass = router.pathname === "/cart" ? "bg-[#2F674A] text-white" : "";
+  const navigationItems = [
+    { name: "Home", href: "/", exact: true },
+    { name: "Products", href: "/products" },
+    { name: "Categories", href: "/categories" },
+    { name: "About", href: "/about" },
+    { name: "Contact", href: "/contact" },
+  ];
 
   return (
-    <nav className="bg-[#F8F0E1] fixed top-0 w-full z-50 shadow-lg">
-      <div className="max-w-7xl mx-auto px-4 flex items-center justify-between h-16">
-        {/* Mobile Left: User & Cart */}
-        <div className="flex items-center gap-4 md:hidden">
-          {/* User icon */}
-          <button className="rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <img
-              src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e"
-              alt="Profile"
-              className="h-8 w-8 rounded-full"
-            />
-          </button>
+    <>
+      {/* Main Navbar */}
+      <nav
+        className={`fixed top-0 left-0 right-0 z-40 transition-all duration-300 ${
+          isScrolled ? "shadow-xl bg-white/95 backdrop-blur-md" : "shadow-lg bg-white"
+        }`}
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            {/* Logo */}
+            <div className="flex items-center">
+              <Link href="/" className="flex items-center space-x-2 group">
+                <div className="bg-gradient-to-r from-[#2F674A] to-[#1F5132] p-2 rounded-lg group-hover:scale-105 transition-transform duration-200">
+                  <span className="text-white font-bold text-xl">T</span>
+                </div>
+                <div>
+                  <span className="text-2xl font-bold text-[#2F674A] group-hover:text-[#1F5132] transition-colors">
+                    Trivedam
+                  </span>
+                  <div className="text-xs text-gray-500 -mt-1">Ayurvedic Wellness</div>
+                </div>
+              </Link>
+            </div>
 
-          {/* Cart icon */}
-          <button
-            aria-label="Cart"
-            className="p-1 rounded-md hover:bg-gray-300 transition"
-          >
-            <svg
-              className="h-6 w-6 text-black"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M3 3h2l.4 2M7 13h10l4-8H5.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <circle cx="7" cy="21" r="1" />
-              <circle cx="17" cy="21" r="1" />
-            </svg>
-          </button>
+            {/* Desktop Navigation */}
+            <div className="hidden lg:flex items-center space-x-8">
+              {navigationItems.map((item) => (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  className={`relative py-2 px-1 text-gray-700 hover:text-[#2F674A] transition-colors duration-200 font-medium group ${
+                    (item.exact
+                      ? router.pathname === item.href
+                      : router.pathname.startsWith(item.href))
+                      ? "text-[#2F674A]"
+                      : ""
+                  }`}
+                >
+                  {item.name}
+                  <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-[#2F674A] transition-all duration-200 group-hover:w-full"></span>
+                </Link>
+              ))}
+            </div>
+
+            {/* Right Side Icons & Auth */}
+            <div className="flex items-center space-x-4">
+              {/* Cart Icon with Count */}
+              <Link href="/cart" className="relative p-2 text-gray-700 hover:text-[#2F674A] transition-colors group">
+                <ShoppingCart className="h-5 w-5 group-hover:scale-110 transition-transform" />
+                {cartCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-[#2F674A] text-white text-xs rounded-full h-5 w-5 flex items-center justify-center animate-pulse">
+                    {cartCount > 99 ? "99+" : cartCount}
+                  </span>
+                )}
+              </Link>
+
+              {/* User Authentication */}
+              {loading ? (
+                <div className="animate-pulse bg-gray-200 h-8 w-20 rounded-full"></div>
+              ) : user ? (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowUserMenu(!showUserMenu)}
+                    className="flex items-center space-x-2 p-2 rounded-full hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="h-8 w-8 bg-gradient-to-r from-[#2F674A] to-[#1F5132] rounded-full flex items-center justify-center text-white text-sm font-bold">
+                      {user.user_metadata?.full_name?.[0] || user.email?.[0] || "U"}
+                    </div>
+                    <ChevronDown className={`h-4 w-4 text-gray-500 transition-transform ${showUserMenu ? "rotate-180" : ""}`} />
+                  </button>
+
+                  {/* User Dropdown */}
+                  {showUserMenu && (
+                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border py-2 z-50">
+                      <div className="px-4 py-2 border-b">
+                        <p className="text-sm font-medium text-gray-900">
+                          {user.user_metadata?.full_name || "User"}
+                        </p>
+                        <p className="text-xs text-gray-500">{user.email}</p>
+                      </div>
+                      <Link href="/profile" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors">
+                        My Profile
+                      </Link>
+                      <Link href="/orders" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors">
+                        My Orders
+                      </Link>
+                      <Link href="/settings" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors">
+                        Settings
+                      </Link>
+                      <div className="border-t mt-2 pt-2">
+                        <button
+                          onClick={handleSignOut}
+                          className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                        >
+                          Sign Out
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center space-x-2">
+                  <Link href="/login">
+                    <ButtonDemo label="Login" bgColor="green" className="px-4 py-2 text-sm" />
+                  </Link>
+                  <Link href="/register" className="hidden sm:block">
+                    <ButtonDemo label="Sign Up" bgColor="black" className="px-4 py-2 text-sm" />
+                  </Link>
+                </div>
+              )}
+
+              {/* Mobile menu button */}
+              <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="lg:hidden p-2 text-gray-700 hover:text-[#2F674A] transition-colors"
+              >
+                {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Mobile Menu */}
+          {isOpen && (
+            <div className="lg:hidden border-t bg-white">
+              <div className="px-2 pt-2 pb-3 space-y-1">
+                {navigationItems.map((item) => (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    className={`block px-3 py-2 rounded-md text-base font-medium transition-colors ${
+                      (item.exact
+                        ? router.pathname === item.href
+                        : router.pathname.startsWith(item.href))
+                        ? "text-[#2F674A] bg-green-50"
+                        : "text-gray-700 hover:text-[#2F674A] hover:bg-gray-50"
+                    }`}
+                    onClick={() => setIsOpen(false)}
+                  >
+                    {item.name}
+                  </Link>
+                ))}
+
+                {user ? (
+                  <div className="border-t mt-4 pt-4">
+                    <div className="px-3 py-2">
+                      <p className="text-base font-medium text-gray-900">
+                        {user.user_metadata?.full_name || "User"}
+                      </p>
+                      <p className="text-sm text-gray-500">{user.email}</p>
+                    </div>
+                    <Link href="/profile" className="block px-3 py-2 text-base text-gray-700 hover:text-[#2F674A] hover:bg-gray-50 transition-colors">
+                      My Profile
+                    </Link>
+                    <Link href="/orders" className="block px-3 py-2 text-base text-gray-700 hover:text-[#2F674A] hover:bg-gray-50 transition-colors">
+                      My Orders
+                    </Link>
+                    <button
+                      onClick={handleSignOut}
+                      className="block w-full text-left px-3 py-2 text-base text-red-600 hover:bg-red-50 transition-colors"
+                    >
+                      Sign Out
+                    </button>
+                  </div>
+                ) : (
+                  <div className="border-t mt-4 pt-4 space-y-2">
+                    <Link href="/login" className="block" onClick={() => setIsOpen(false)}>
+                      <ButtonDemo label="Login" bgColor="green" className="w-full" />
+                    </Link>
+                    <Link href="/register" className="block" onClick={() => setIsOpen(false)}>
+                      <ButtonDemo label="Sign Up" bgColor="black" className="w-full" />
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
+      </nav>
 
-        {/* Mobile Center: Trivedam + logo */}
-        <div className="flex items-center gap-2 md:hidden mx-auto">
-          <span className="font-bold text-lg text-black select-none">
-            Trivedam
-          </span>
-          <img
-            src="https://tailwindcss.com/plus-assets/img/logos/mark.svg?color=indigo&shade=500"
-            alt="Logo"
-            className="h-6 w-auto"
-          />
-        </div>
-
-        {/* Mobile Right: Hamburger */}
-        <button
-          className="md:hidden p-2 rounded-md hover:bg-gray-300 transition"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          aria-label="Toggle menu"
-        >
-          <svg
-            className="h-6 w-6 text-black"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            viewBox="0 0 24 24"
-          >
-            {mobileMenuOpen ? (
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            ) : (
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M4 6h16M4 12h16M4 18h16"
-              />
-            )}
-          </svg>
-        </button>
-
-        {/* Desktop Left: Trivedam + logo */}
-        <div className="hidden md:flex items-center gap-2">
-          <span className="font-bold text-lg text-black select-none">Trivedam</span>
-          <img
-            src="https://tailwindcss.com/plus-assets/img/logos/mark.svg?color=indigo&shade=500"
-            alt="Logo"
-            className="h-8 w-auto"
-          />
-        </div>
-
-        {/* Desktop Center: Nav Links */}
-        <div className="hidden md:flex space-x-6 relative" style={{ minWidth: "320px" }}>
-          {buttons.map(({ name, href, label }, idx) => (
-            <Link
-              key={name}
-              href={href}
-              onMouseEnter={() => setHovered(name)}
-              onMouseLeave={() => setHovered(null)}
-              className={getClasses(href, name)}
-              aria-current={router.pathname === href ? "page" : undefined}
-              style={{
-                transform: getTransform(idx),
-                transition: "transform 0.3s ease",
-                zIndex: hovered === name ? 10 : 1,
-                position: "relative",
-              }}
-            >
-              {label}
-            </Link>
-          ))}
-        </div>
-
-        {/* Desktop Right: Cart icon with hover effect */}
-        <div className="hidden md:flex items-center space-x-4">
-          <Link
-            href="/cart"
-            onMouseEnter={() => setHovered('cart')}
-            onMouseLeave={() => setHovered(null)}
-            className={`p-2 rounded-md cursor-pointer flex items-center justify-center transition-all duration-300 ease-in-out ${cartActiveClass || cartBgClass}`}
-            aria-current={router.pathname === "/cart" ? "page" : undefined}
-            style={{ position: "relative", zIndex: hovered === "cart" ? 10 : 1 }}
-          >
-            <svg
-              className="h-6 w-6"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M3 3h2l.4 2M7 13h10l4-8H5.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <circle cx="7" cy="21" r="1" />
-              <circle cx="17" cy="21" r="1" />
-            </svg>
-          </Link>
-
-          {/* Profile */}
-          <button className="relative rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
-            <span className="sr-only">Open user menu</span>
-            <img
-              src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e"
-              alt="Profile"
-              className="h-8 w-8 rounded-full"
-            />
-          </button>
-        </div>
-      </div>
-
-      {/* Mobile menu */}
-      {mobileMenuOpen && (
-        <div className="md:hidden bg-[#F8F0E1] px-4 py-3 space-y-1 shadow-lg">
-          {buttons.map(({ name, href, label }) => (
-            <Link
-              key={name}
-              href={href}
-              className={`block px-3 py-2 rounded-md font-medium ${
-                router.pathname === href
-                  ? "bg-[#2F674A] text-white"
-                  : "text-black hover:bg-[#DDE6D9]"
-              }`}
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              {label}
-            </Link>
-          ))}
-        </div>
+      {/* Click outside to close user menu */}
+      {showUserMenu && (
+        <div className="fixed inset-0 z-30" onClick={() => setShowUserMenu(false)} />
       )}
-    </nav>
+
+      {/* Spacer for fixed navbar */}
+      <div className="h-16" />
+    </>
   );
 }
