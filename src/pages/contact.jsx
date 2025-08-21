@@ -25,7 +25,7 @@ export default function Contact() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    // Here you would typically send the data to your backend
+    // send data to backend from this point with api end points
     console.log('Form submitted:', formData);
     setIsSubmitted(true);
     // Reset form after 3 seconds
