@@ -64,9 +64,8 @@ export default function Navbar() {
   const navigationItems = [
     { name: "Home", href: "/", exact: true },
     { name: "Products", href: "/products" },
-    { name: "Categories", href: "/categories" },
-    { name: "About", href: "/about" },
     { name: "Contact", href: "/contact" },
+    { name: "FAQ", href: "/faq" },
   ];
 
   return (
