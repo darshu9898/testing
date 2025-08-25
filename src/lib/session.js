@@ -1,5 +1,4 @@
-import crypto from 'crypto'
-
+// src/lib/session.js
 const SESSION_COOKIE_NAME = 'guest_session_id'
 const SESSION_OPTIONS = {
   httpOnly: true,
@@ -9,13 +8,28 @@ const SESSION_OPTIONS = {
   path: '/'
 }
 
+// Edge Runtime compatible random string generator
+function generateSessionId() {
+  // Use crypto.getRandomValues (Web Crypto API) instead of Node.js crypto
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const array = new Uint8Array(32)
+    crypto.getRandomValues(array)
+    return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('')
+  }
+  
+  // Fallback for environments without crypto.getRandomValues
+  return Math.random().toString(36).substring(2) + 
+         Math.random().toString(36).substring(2) + 
+         Date.now().toString(36)
+}
+
 export function getOrSetSessionId(req, res) {
   // Check if session exists in cookies
   let sessionId = req?.cookies?.[SESSION_COOKIE_NAME]
   
   if (!sessionId) {
-    // Generate new session ID for guest users
-    sessionId = crypto.randomBytes(32).toString('hex')
+    // Generate new session ID for guest users using Edge Runtime compatible method
+    sessionId = generateSessionId()
     
     // Set cookie in response
     if (res?.setHeader) {
