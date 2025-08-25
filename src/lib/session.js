@@ -1,4 +1,4 @@
-import { randomBytes } from 'crypto'
+import crypto from 'crypto'
 
 const SESSION_COOKIE_NAME = 'guest_session_id'
 const SESSION_OPTIONS = {
@@ -15,7 +15,7 @@ export function getOrSetSessionId(req, res) {
   
   if (!sessionId) {
     // Generate new session ID for guest users
-    sessionId = randomBytes(32).toString('hex')
+    sessionId = crypto.randomBytes(32).toString('hex')
     
     // Set cookie in response
     if (res?.setHeader) {

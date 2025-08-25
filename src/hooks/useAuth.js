@@ -25,14 +25,19 @@ export const AuthProvider = ({ children }) => {
         setLoading(false)
         
         // Merge guest cart when user signs in
+        // In useAuth.js, improve the cart merge:
         if (event === 'SIGNED_IN' && session?.user) {
           try {
-            await fetch('/api/cart/merge', {
+            const response = await fetch('/api/cart/merge', {
               method: 'POST',
               credentials: 'include'
             })
+            if (!response.ok) {
+              console.warn('Cart merge failed, but login successful')
+            }
           } catch (error) {
             console.error('Cart merge failed:', error)
+            // Don't fail login if cart merge fails
           }
         }
       }

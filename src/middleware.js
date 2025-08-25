@@ -1,8 +1,11 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
+import { getOrSetSessionId } from './lib/session'
+import { randomBytes } from 'crypto' 
 
 export async function middleware(req) {
   const res = NextResponse.next()
+  getOrSetSessionId(req, res)
   
   // Create Supabase client for middleware
   const supabase = createServerClient(
