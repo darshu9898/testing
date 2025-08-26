@@ -127,6 +127,8 @@ export default async function handler(req, res) {
       if (userAddress !== undefined) updateData.userAddress = userAddress ? userAddress.trim() : null
 
       try {
+      console.log(updateData.userPhone)
+      console.log('hello')
         // Update user
         const updatedUser = await prisma.users.update({
           where: { userId: userIdInt },

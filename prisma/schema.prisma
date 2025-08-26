@@ -13,7 +13,7 @@ model Users {
   supabaseId   String?   @unique
   userName     String
   userEmail    String   @unique
-  userPhone    Int?
+  userPhone    BigInt?
   userAddress  String?
   created_at   DateTime  @default(now())
 

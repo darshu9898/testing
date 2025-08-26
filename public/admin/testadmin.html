@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Admin Dashboard - API Tester (Modals)</title>
+  <title>Admin Dashboard - API Tester (Modal Login)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     .response-box { max-height: 300px; overflow-y: auto; }
@@ -30,10 +30,9 @@
             <button id="logoutBtn" onclick="adminLogout()" class="ml-4 bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600">Logout</button>
           </div>
 
+          <!-- Login button opens modal -->
           <div id="loginShort" class="flex gap-2 items-center">
-            <input id="adminId" type="text" value="admin123" class="px-3 py-2 border rounded-md" />
-            <input id="adminPassword" type="password" value="admin@2024" class="px-3 py-2 border rounded-md" />
-            <button id="loginBtn" onclick="adminLogin()" class="bg-blue-600 text-white px-3 py-2 rounded-md hover:bg-blue-700">🔐 Login</button>
+            <button id="openLoginModalBtn" onclick="openLoginModal()" class="bg-blue-600 text-white px-3 py-2 rounded-md hover:bg-blue-700">🔐 Login</button>
           </div>
         </div>
       </div>
@@ -62,7 +61,7 @@
       </div>
     </div>
 
-    <!-- Main -->
+    <!-- Main Panels -->
     <div id="mainArea" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <!-- Users Panel -->
       <div class="bg-white rounded-lg shadow p-4">
@@ -70,7 +69,6 @@
           <h3 class="text-lg font-semibold">👥 Users</h3>
           <div class="text-sm text-gray-500">Results: <span id="userCount">0</span></div>
         </div>
-
         <div class="table-scroll border rounded-md">
           <table class="min-w-full text-sm">
             <thead class="bg-gray-50 sticky top-0">
@@ -93,16 +91,8 @@
       <div class="bg-white rounded-lg shadow p-4">
         <div class="flex items-center justify-between mb-3">
           <h3 class="text-lg font-semibold">📦 Products</h3>
-          <div class="flex items-center gap-3">
-            <div class="text-sm text-gray-500">Results: <span id="productCount">0</span></div>
-            <!-- ✅ New Create Product Button -->
-            <button onclick="openCreateProductModal()" 
-              class="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700">
-              ➕ Create
-            </button>
-          </div>
+          <div class="text-sm text-gray-500">Results: <span id="productCount">0</span></div>
         </div>
-
         <div class="table-scroll border rounded-md">
           <table class="min-w-full text-sm">
             <thead class="bg-gray-50 sticky top-0">
@@ -129,7 +119,6 @@
           <span>Loading...</span>
         </div>
       </div>
-
       <div id="response" class="response-box bg-gray-50 border border-gray-200 rounded-md p-4 font-mono text-sm whitespace-pre-wrap"></div>
       <div class="flex gap-2 mt-4">
         <button onclick="clearResponse()" class="bg-gray-500 text-white px-3 py-1 rounded text-sm hover:bg-gray-600">🗑️ Clear</button>
@@ -138,7 +127,37 @@
     </div>
   </div>
 
-  <!-- User Edit Modal -->
+  <!-- LOGIN MODAL -->
+  <div id="loginModal" class="fixed inset-0 flex items-center justify-center modal-backdrop hidden z-50" role="dialog" aria-modal="true">
+    <div class="bg-white rounded-lg shadow-lg w-full max-w-md p-6">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-semibold">Admin Login</h3>
+        <button class="text-gray-600 hover:text-gray-900" onclick="closeLoginModal()">✕</button>
+      </div>
+
+      <form id="loginForm" onsubmit="event.preventDefault(); submitLogin();" class="space-y-3">
+        <div>
+          <label class="block text-sm">Admin ID
+            <input id="modalAdminId" class="w-full px-3 py-2 border rounded mt-1" type="text" required />
+          </label>
+        </div>
+        <div>
+          <label class="block text-sm">Password
+            <input id="modalAdminPassword" class="w-full px-3 py-2 border rounded mt-1" type="password" required />
+          </label>
+        </div>
+
+        <div id="loginError" class="text-sm text-red-600"></div>
+
+        <div class="flex justify-end gap-2 mt-4">
+          <button type="button" onclick="closeLoginModal()" class="px-4 py-2 rounded bg-gray-200">Cancel</button>
+          <button id="loginSubmitBtn" type="submit" class="px-4 py-2 rounded bg-blue-600 text-white">Login</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- User Edit Modal (keeps previous modal) -->
   <div id="userEditModal" class="fixed inset-0 flex items-center justify-center modal-backdrop hidden z-50" role="dialog" aria-modal="true">
     <div class="bg-white rounded-lg shadow-lg w-full max-w-2xl p-6">
       <div class="flex justify-between items-center mb-4">
@@ -174,37 +193,36 @@
   </div>
 
   <!-- Product Edit Modal -->
-  <!-- Create Product Modal -->
-<div id="productCreateModal" class="fixed inset-0 flex items-center justify-center modal-backdrop hidden z-50" role="dialog" aria-modal="true">
-  <div class="bg-white rounded-lg shadow-lg w-full max-w-2xl p-6">
-    <div class="flex justify-between items-center mb-4">
-      <h3 class="text-lg font-semibold">Create Product</h3>
-      <button class="text-gray-600 hover:text-gray-900" onclick="closeCreateProductModal()">✕</button>
+  <div id="productEditModal" class="fixed inset-0 flex items-center justify-center modal-backdrop hidden z-50" role="dialog" aria-modal="true">
+    <div class="bg-white rounded-lg shadow-lg w-full max-w-2xl p-6">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-semibold">Edit Product</h3>
+        <button class="text-gray-600 hover:text-gray-900" onclick="closeProductModal()">✕</button>
+      </div>
+
+      <form id="productEditForm" onsubmit="event.preventDefault(); submitProductEdit();" class="space-y-3">
+        <input type="hidden" id="editProductId" />
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <label class="block text-sm">Name
+            <input id="editProductName" class="w-full px-3 py-2 border rounded" type="text" />
+          </label>
+          <label class="block text-sm">Stock
+            <input id="editProductStock" class="w-full px-3 py-2 border rounded" type="number" />
+          </label>
+          <label class="block text-sm md:col-span-2">Description
+            <textarea id="editProductDescription" class="w-full px-3 py-2 border rounded" rows="4"></textarea>
+          </label>
+        </div>
+
+        <div id="productEditErrors" class="text-sm text-red-600"></div>
+
+        <div class="flex justify-end gap-2 mt-4">
+          <button type="button" onclick="closeProductModal()" class="px-4 py-2 rounded bg-gray-200">Cancel</button>
+          <button id="productUpdateBtn" type="submit" class="px-4 py-2 rounded bg-green-600 text-white">Update</button>
+        </div>
+      </form>
     </div>
-
-    <form id="productCreateForm" onsubmit="event.preventDefault(); submitProductCreate();" class="space-y-3">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <label class="block text-sm">Name
-          <input id="createProductName" class="w-full px-3 py-2 border rounded" type="text" required />
-        </label>
-        <label class="block text-sm">Stock
-          <input id="createProductStock" class="w-full px-3 py-2 border rounded" type="number" />
-        </label>
-        <label class="block text-sm md:col-span-2">Description
-          <textarea id="createProductDescription" class="w-full px-3 py-2 border rounded" rows="4"></textarea>
-        </label>
-      </div>
-
-      <div id="productCreateErrors" class="text-sm text-red-600"></div>
-
-      <div class="flex justify-end gap-2 mt-4">
-        <button type="button" onclick="closeCreateProductModal()" class="px-4 py-2 rounded bg-gray-200">Cancel</button>
-        <button type="submit" class="px-4 py-2 rounded bg-blue-600 text-white">Create</button>
-      </div>
-    </form>
   </div>
-</div>
-
 
   <!-- Toast -->
   <div id="toast" class="toast hidden"></div>
@@ -231,11 +249,27 @@
       setTimeout(() => t.classList.add('hidden'), 3500);
     }
 
-    // Auth
-    async function adminLogin() {
-      const adminId = document.getElementById('adminId').value;
-      const adminPassword = document.getElementById('adminPassword').value;
-      if (!adminId || !adminPassword) return showToast('Enter admin credentials', 'error');
+    // LOGIN MODAL controls
+    function openLoginModal() {
+      document.getElementById('loginError').textContent = '';
+      document.getElementById('modalAdminId').value = '';
+      document.getElementById('modalAdminPassword').value = '';
+      document.getElementById('loginModal').classList.remove('hidden');
+      document.getElementById('modalAdminId').focus();
+    }
+    function closeLoginModal() {
+      document.getElementById('loginModal').classList.add('hidden');
+    }
+
+    async function submitLogin() {
+      const adminId = document.getElementById('modalAdminId').value.trim();
+      const adminPassword = document.getElementById('modalAdminPassword').value;
+
+      if (!adminId || !adminPassword) {
+        document.getElementById('loginError').textContent = 'Please enter admin ID and password';
+        return;
+      }
+      document.getElementById('loginError').textContent = '';
 
       showLoading();
       try {
@@ -247,22 +281,29 @@
         const data = await res.json();
         displayResponse({ status: res.status, ...data }, res.ok ? 'success' : 'error');
 
-        if (data.success) {
+        if (res.ok && data.success && data.token) {
           adminToken = data.token;
           document.getElementById('tokenValue').textContent = data.token;
           document.getElementById('expiryTime').textContent = new Date(data.expiresAt || Date.now() + 3600*1000).toLocaleString();
           document.getElementById('tokenDisplay').classList.remove('hidden');
           document.getElementById('loginShort').classList.add('hidden');
+          closeLoginModal();
           showToast('Logged in', 'success');
         } else {
-          showToast(data.error || 'Login failed', 'error');
+          const errMsg = data.error || data.message || 'Login failed';
+          document.getElementById('loginError').textContent = errMsg;
+          showToast('Login failed', 'error');
         }
       } catch (err) {
         displayResponse({ error: err.message }, 'error');
-        showToast('Login error', 'error');
+        document.getElementById('loginError').textContent = 'Network error';
+        showToast('Network error', 'error');
+      } finally {
+        hideLoading();
       }
     }
 
+    // Auth logout
     async function adminLogout() {
       if (!adminToken) return;
       try {
@@ -282,7 +323,7 @@
       }
     }
 
-    // Generic request helper
+    // Generic request helper (requires adminToken)
     async function makeRequest(endpoint, options = {}) {
       if (!adminToken) {
         showToast('Please login first', 'error');
@@ -309,8 +350,9 @@
       }
     }
 
-    // Users
+    // USERS & PRODUCTS code (unchanged behavior as previous)
     let usersCache = [];
+    let productsCache = [];
 
     async function showUsers() {
       if (!adminToken) return showToast('Login required', 'error');
@@ -399,7 +441,6 @@
       container.innerHTML = html.join('');
     }
 
-    // open user modal & populate
     function openUserModal(userId) {
       const user = usersCache.find(u => (u.userId ?? u.id ?? u._id) == userId);
       if (!user) return showToast('User not found', 'error');
@@ -414,7 +455,6 @@
 
     function closeUserModal() { document.getElementById('userEditModal').classList.add('hidden'); }
 
-    // submit user edit
     async function submitUserEdit() {
       const userId = document.getElementById('editUserId').value;
       const userName = document.getElementById('editUserName').value.trim();
@@ -426,7 +466,6 @@
       const errors = [];
       if (userEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userEmail)) errors.push('Invalid email format');
       if (userPhoneRaw && isNaN(userPhoneRaw)) errors.push('Phone must be numeric');
-
       if (errors.length) {
         document.getElementById('userEditErrors').textContent = errors.join(' • ');
         return;
@@ -435,7 +474,6 @@
       const body = {};
       if (userName !== '') body.userName = userName;
       if (userEmail !== '') body.userEmail = userEmail;
-      // backend accepts null for phone/address — send null when empty
       body.userPhone = userPhoneRaw === '' ? null : Number(userPhoneRaw);
       body.userAddress = userAddress === '' ? null : userAddress;
 
@@ -467,8 +505,6 @@
     }
 
     // Products
-    let productsCache = [];
-
     async function showProducts() {
       if (!adminToken) return showToast('Login required', 'error');
       const res = await makeRequest('/api/admin/products');
@@ -582,51 +618,6 @@
         showToast('Failed to update product', 'error');
       }
     }
-    function openCreateProductModal() {
-  document.getElementById('createProductName').value = '';
-  document.getElementById('createProductDescription').value = '';
-  document.getElementById('createProductStock').value = '';
-  document.getElementById('productCreateErrors').textContent = '';
-  document.getElementById('productCreateModal').classList.remove('hidden');
-}
-
-function closeCreateProductModal() {
-  document.getElementById('productCreateModal').classList.add('hidden');
-}
-
-async function submitProductCreate() {
-  const name = document.getElementById('createProductName').value.trim();
-  const desc = document.getElementById('createProductDescription').value.trim();
-  const stockRaw = document.getElementById('createProductStock').value.trim();
-
-  const errors = [];
-  if (!name) errors.push('Name is required');
-  if (stockRaw && isNaN(stockRaw)) errors.push('Stock must be numeric');
-  if (errors.length) {
-    document.getElementById('productCreateErrors').textContent = errors.join(' • ');
-    return;
-  }
-
-  const body = {
-    productName: name,
-    productDescription: desc === '' ? null : desc,
-    productStock: stockRaw === '' ? null : Number(stockRaw)
-  };
-
-  const res = await makeRequest(`/api/admin/products`, {
-    method: 'POST',
-    body: JSON.stringify(body)
-  });
-  if (res && res.ok) {
-    productsCache.push(body);
-    renderProducts(productsCache);
-    closeCreateProductModal();
-    showToast('Product created', 'success');
-  } else {
-    showToast('Failed to create product', 'error');
-  }
-}
-
 
     // Search helpers
     function applySearch() {
@@ -649,7 +640,7 @@ async function submitProductCreate() {
     }
     function clearSearch() { document.getElementById('globalSearch').value = ''; if (usersCache.length) renderUsers(usersCache); if (productsCache.length) renderProducts(productsCache); }
 
-    // Test suite & misc
+    // Test suite & misc (kept)
     async function runAllTests() {
       displayResponse({ message: '🚀 Starting comprehensive test suite...' });
       if (!adminToken) return showToast('Please login first', 'error');
@@ -670,15 +661,16 @@ async function submitProductCreate() {
 
     function populateWithSampleData() { document.getElementById('globalSearch').value = ''; showToast('Sample data loaded', 'success'); }
 
-    // helper to escape HTML
+    // helper escape
     function escapeHtml(str) { if (str === null || str === undefined) return ''; return String(str).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;'); }
 
     // init
-    document.addEventListener('DOMContentLoaded', function() { displayResponse({ message: '👋 Welcome! Login then click "Show Users" or "Show Products".' }); });
+    document.addEventListener('DOMContentLoaded', function() { displayResponse({ message: '👋 Welcome! Click Login to open the admin login modal.' }); });
 
-    // close modals on escape
+    // close modals on Escape
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
+        closeLoginModal();
         closeUserModal();
         closeProductModal();
       }
