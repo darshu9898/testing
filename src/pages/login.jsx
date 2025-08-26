@@ -14,12 +14,32 @@ export default function Login() {
   
   const { signIn, signInWithGoogle, user } = useAuth();
   const router = useRouter();
-  const { redirect } = router.query;
+  const { redirect, error: urlError } = router.query;
+
+  // Handle URL error params
+  useEffect(() => {
+    if (urlError) {
+      switch (urlError) {
+        case 'no_code':
+          setError('OAuth authentication failed. Please try again.');
+          break;
+        case 'oauth_error':
+          setError('OAuth login failed. Please try again.');
+          break;
+        case 'callback_error':
+          setError('Authentication callback failed. Please try again.');
+          break;
+        default:
+          setError('An authentication error occurred. Please try again.');
+      }
+    }
+  }, [urlError]);
 
   // Redirect if already logged in
   useEffect(() => {
     if (user) {
-      router.push(redirect || '/');
+      const redirectTo = redirect && typeof redirect === 'string' ? redirect : '/';
+      router.push(redirectTo);
     }
   }, [user, router, redirect]);
 
@@ -30,16 +50,17 @@ export default function Login() {
 
     try {
       await signIn(email, password);
-      router.push(redirect || '/');
+      const redirectTo = redirect && typeof redirect === 'string' ? redirect : '/';
+      router.push(redirectTo);
     } catch (error) {
       setError(error.message);
-    } finally {
       setLoading(false);
     }
   };
 
   const handleGoogleLogin = async () => {
     try {
+      setError('');
       await signInWithGoogle();
       // Redirect is handled by the callback
     } catch (error) {
@@ -48,9 +69,11 @@ export default function Login() {
   };
 
   if (user) {
-    return <div className="pt-16 min-h-screen flex items-center justify-center">
-      <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-[#2F674A]"></div>
-    </div>;
+    return (
+      <div className="pt-16 min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-[#2F674A]"></div>
+      </div>
+    );
   }
 
   return (
@@ -90,6 +113,7 @@ export default function Login() {
                   required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
                   placeholder="your@email.com"
+                  disabled={loading}
                 />
               </div>
 
@@ -105,43 +129,50 @@ export default function Login() {
                   required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
                   placeholder="Your password"
+                  disabled={loading}
                 />
               </div>
 
-              <ButtonDemo
-                label={loading ? "Signing In..." : "Sign In"}
-                bgColor="green"
-                onClick={handleEmailLogin}
+              <button
+                type="submit"
                 disabled={loading}
-              />
+                className="w-full px-4 py-2 bg-[#2F674A] text-white hover:bg-green-700 rounded cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? "Signing In..." : "Sign In"}
+              </button>
             </form>
 
-            {/* Divider */}
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Or continue with</span>
-              </div>
-            </div>
+            {!loading && (
+              <>
+                {/* Divider */}
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-300" />
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-white text-gray-500">Or continue with</span>
+                  </div>
+                </div>
 
-            {/* Google Login */}
-            <ButtonDemo
-              label="Continue with Google"
-              bgColor="white"
-              onClick={handleGoogleLogin}
-            />
+                {/* Google Login */}
+                <button
+                  onClick={handleGoogleLogin}
+                  className="w-full px-4 py-2 bg-white text-black hover:bg-gray-200 border border-gray-300 rounded cursor-pointer transition-colors"
+                >
+                  Continue with Google
+                </button>
 
-            {/* Sign Up Link */}
-            <div className="text-center">
-              <p className="text-sm text-gray-600">
-                Don't have an account?{' '}
-                <Link href="/register" className="font-medium text-[#2F674A] hover:underline">
-                  Sign up here
-                </Link>
-              </p>
-            </div>
+                {/* Sign Up Link */}
+                <div className="text-center">
+                  <p className="text-sm text-gray-600">
+                    Don't have an account?{' '}
+                    <Link href="/register" className="font-medium text-[#2F674A] hover:underline">
+                      Sign up here
+                    </Link>
+                  </p>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

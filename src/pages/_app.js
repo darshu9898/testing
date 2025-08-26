@@ -13,27 +13,25 @@ export default function App({ Component, pageProps }) {
     setIsMounted(true);
   }, []);
 
+  // Don't render anything until mounted to prevent hydration issues
+  if (!isMounted) {
+    return null;
+  }
+
   return (
     <AuthProvider>
       <Navbar />
       <AnimatePresence mode="wait" initial={false}>
-        {isMounted && (
-          <motion.div
-            key={router.route}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.2 }}
-            className="min-h-screen bg-white"
-          >
-            <Component {...pageProps} />
-          </motion.div>
-        )}
-        {!isMounted && (
-          <div className="min-h-screen bg-white">
-            <Component {...pageProps} />
-          </div>
-        )}
+        <motion.div
+          key={router.route}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          transition={{ duration: 0.2 }}
+          className="min-h-screen bg-white"
+        >
+          <Component {...pageProps} />
+        </motion.div>
       </AnimatePresence>
     </AuthProvider>
   );
