@@ -27,23 +27,42 @@ export default async function handler(req, res) {
   }
 
   try {
+    console.log('🔐 Server: Attempting login for:', email)
+    
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
 
     if (error) {
-      console.error('Login error:', error.message)
+      console.error('❌ Server: Login error:', error.message)
       return res.status(401).json({ error: error.message })
     }
 
-    // Cookies are automatically set by Supabase client via our cookie handlers
+    if (!data.session) {
+      console.error('❌ Server: No session returned from Supabase')
+      return res.status(401).json({ error: 'Login failed - no session created' })
+    }
+
+    console.log('✅ Server: Login successful, session created for:', data.user.email)
+    console.log('🍪 Server: Session expires at:', new Date(data.session.expires_at * 1000))
+
+    // Verify cookies were set by checking response headers
+    const setCookieHeaders = res.getHeader('Set-Cookie')
+    console.log('🍪 Server: Set-Cookie headers count:', Array.isArray(setCookieHeaders) ? setCookieHeaders.length : (setCookieHeaders ? 1 : 0))
+
+    // Return success with user data
     return res.status(200).json({ 
       user: data.user,
+      session: {
+        access_token: data.session.access_token,
+        expires_at: data.session.expires_at,
+        refresh_token: data.session.refresh_token
+      },
       message: 'Login successful'
     })
   } catch (error) {
-    console.error('Login server error:', error)
+    console.error('💥 Server: Login server error:', error)
     return res.status(500).json({ error: 'Internal server error' })
   }
 }

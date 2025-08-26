@@ -32,21 +32,21 @@ export default function Register() {
 
     try {
       const result = await signUp(email, password, fullName);
-      setSuccess(result.message);
+      setSuccess('Account created successfully! Redirecting to login...');
       
-      // Optionally redirect to login after a delay
+      // Always redirect to login for consistent UX
       setTimeout(() => {
         router.push('/login');
-      }, 3000);
+      }, 2000);
     } catch (error) {
       setError(error.message);
-    } finally {
       setLoading(false);
     }
   };
 
   const handleGoogleSignUp = async () => {
     try {
+      setError('');
       await signInWithGoogle();
     } catch (error) {
       setError(error.message);
@@ -54,9 +54,11 @@ export default function Register() {
   };
 
   if (user) {
-    return <div className="pt-16 min-h-screen flex items-center justify-center">
-      <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-[#2F674A]"></div>
-    </div>;
+    return (
+      <div className="pt-16 min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-[#2F674A]"></div>
+      </div>
+    );
   }
 
   return (
@@ -101,6 +103,7 @@ export default function Register() {
                   onChange={(e) => setFullName(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
                   placeholder="Your full name"
+                  disabled={loading}
                 />
               </div>
 
@@ -116,6 +119,7 @@ export default function Register() {
                   required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
                   placeholder="your@email.com"
+                  disabled={loading}
                 />
               </div>
 
@@ -131,44 +135,51 @@ export default function Register() {
                   required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
                   placeholder="Create a strong password"
+                  disabled={loading}
                 />
                 <p className="text-xs text-gray-500 mt-1">Must be at least 6 characters long</p>
               </div>
 
-              <ButtonDemo
-                label={loading ? "Creating Account..." : "Create Account"}
-                bgColor="green"
-                onClick={handleRegister}
+              <button
+                type="submit"
                 disabled={loading}
-              />
+                className="w-full px-4 py-2 bg-[#2F674A] text-white hover:bg-green-700 rounded cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? "Creating Account..." : "Create Account"}
+              </button>
             </form>
 
-            {/* Divider */}
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Or continue with</span>
-              </div>
-            </div>
+            {!loading && (
+              <>
+                {/* Divider */}
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-300" />
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-white text-gray-500">Or continue with</span>
+                  </div>
+                </div>
 
-            {/* Google Sign Up */}
-            <ButtonDemo
-              label="Continue with Google"
-              bgColor="white"
-              onClick={handleGoogleSignUp}
-            />
+                {/* Google Sign Up */}
+                <button
+                  onClick={handleGoogleSignUp}
+                  className="w-full px-4 py-2 bg-white text-black hover:bg-gray-200 border border-gray-300 rounded cursor-pointer transition-colors"
+                >
+                  Continue with Google
+                </button>
 
-            {/* Login Link */}
-            <div className="text-center">
-              <p className="text-sm text-gray-600">
-                Already have an account?{' '}
-                <Link href="/login" className="font-medium text-[#2F674A] hover:underline">
-                  Sign in here
-                </Link>
-              </p>
-            </div>
+                {/* Login Link */}
+                <div className="text-center">
+                  <p className="text-sm text-gray-600">
+                    Already have an account?{' '}
+                    <Link href="/login" className="font-medium text-[#2F674A] hover:underline">
+                      Sign in here
+                    </Link>
+                  </p>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

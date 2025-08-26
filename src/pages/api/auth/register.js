@@ -1,4 +1,3 @@
-// src/pages/api/auth/register.js - Enhanced version
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { getOrSetSessionId } from '@/lib/session'
 import prisma from '@/lib/prisma'
@@ -112,6 +111,14 @@ export default async function handler(req, res) {
         }
       }
 
+      // IMPORTANT: Sign out the user immediately after registration
+      // This ensures consistent flow: register -> login page -> manual login
+      try {
+        await supabase.auth.signOut()
+      } catch (signOutError) {
+        console.warn('Failed to sign out after registration:', signOutError.message)
+      }
+
       return res.status(201).json({
         success: true,
         user: {
@@ -120,7 +127,7 @@ export default async function handler(req, res) {
           name: prismaUser.userName,
           userId: prismaUser.userId
         },
-        message: 'Registration successful! Please check your email to verify your account.'
+        message: 'Registration successful! Please sign in to continue.'
       })
     }
 

@@ -1,9 +1,8 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/router"; // if you're on the App Router, switch to next/navigation
+import { useRouter } from "next/router";
 import { useAuth } from "@/hooks/useAuth";
-import { ButtonDemo } from "./Button";
 import {
   ShoppingCart,
   Menu,
@@ -16,49 +15,73 @@ export default function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [cartCount, setCartCount] = useState(0);
+  const [mounted, setMounted] = useState(false);
 
   const { user, signOut, loading } = useAuth();
   const router = useRouter();
 
+  // Prevent hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   // Handle scroll effect (safe on client only)
   useEffect(() => {
+    if (!mounted) return;
+    
     const handleScroll = () => {
-      if (typeof window !== "undefined") {
-        setIsScrolled(window.scrollY > 10);
-      }
+      setIsScrolled(window.scrollY > 10);
     };
+    
     handleScroll();
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
+  }, [mounted]);
 
-  // Fetch cart count
-  useEffect(() => {
-    const fetchCartCount = async () => {
-      try {
-        const response = await fetch("/api/cart", { credentials: "include" });
-        if (response.ok) {
-          const data = await response.json();
-          setCartCount(data.items?.length || 0);
-        }
-      } catch (error) {
-        console.error("Failed to fetch cart count:", error);
+  // Fetch cart count - FIXED: prevent infinite loop
+  const fetchCartCount = useCallback(async () => {
+    if (!mounted) return;
+    
+    try {
+      const response = await fetch("/api/cart", { 
+        credentials: "include",
+        cache: 'no-cache'  // Prevent caching issues
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setCartCount(data.items?.length || 0);
       }
-    };
+    } catch (error) {
+      console.error("Failed to fetch cart count:", error);
+      setCartCount(0); // Reset on error
+    }
+  }, [mounted]);
 
+  // FIXED: Only fetch cart on mount and when user changes (not on every render)
+  useEffect(() => {
+    if (!mounted) return;
+    
     fetchCartCount();
-    const interval = setInterval(fetchCartCount, 30000); // Update every 30 seconds
+    
+    // Optional: Set up periodic refresh (less frequent)
+    const interval = setInterval(fetchCartCount, 60000); // Every 1 minute instead of 30 seconds
     return () => clearInterval(interval);
-  }, [user]);
+  }, [fetchCartCount, user?.id]); // Only depend on user ID, not entire user object
 
   const handleSignOut = async () => {
     try {
       await signOut();
       setShowUserMenu(false);
       setCartCount(0);
+      router.push('/login');
     } catch (error) {
       console.error("Sign out error:", error);
     }
+  };
+
+  const handleNavClick = (href) => {
+    setIsOpen(false);
+    router.push(href);
   };
 
   const navigationItems = [
@@ -68,11 +91,16 @@ export default function Navbar() {
     { name: "FAQ", href: "/faq" },
   ];
 
+  // Don't render until mounted to prevent hydration mismatch
+  if (!mounted) {
+    return <div className="h-16" />;
+  }
+
   return (
     <>
       {/* Main Navbar */}
       <nav
-        className={`fixed top-0 left-0 right-0 z-40 transition-all duration-300 ${
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
           isScrolled ? "shadow-xl bg-white/95 backdrop-blur-md" : "shadow-lg bg-white"
         }`}
       >
@@ -171,19 +199,25 @@ export default function Navbar() {
                 </div>
               ) : (
                 <div className="flex items-center space-x-2">
-                  <Link href="/login">
-                    <ButtonDemo label="Login" bgColor="green" className="px-4 py-2 text-sm" />
-                  </Link>
-                  <Link href="/register" className="hidden sm:block">
-                    <ButtonDemo label="Sign Up" bgColor="black" className="px-4 py-2 text-sm" />
-                  </Link>
+                  <button
+                    onClick={() => handleNavClick('/login')}
+                    className="px-4 py-2 text-sm bg-[#2F674A] text-white hover:bg-green-700 rounded transition-colors font-medium"
+                  >
+                    Login
+                  </button>
+                  <button
+                    onClick={() => handleNavClick('/register')}
+                    className="hidden sm:block px-4 py-2 text-sm bg-black text-white hover:bg-gray-800 rounded transition-colors font-medium"
+                  >
+                    Sign Up
+                  </button>
                 </div>
               )}
 
               {/* Mobile menu button */}
               <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="lg:hidden p-2 text-gray-700 hover:text-[#2F674A] transition-colors"
+                className="lg:hidden p-2 text-gray-700 hover:text-[#2F674A] transition-colors z-50 relative"
               >
                 {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
               </button>
@@ -192,23 +226,22 @@ export default function Navbar() {
 
           {/* Mobile Menu */}
           {isOpen && (
-            <div className="lg:hidden border-t bg-white">
+            <div className="lg:hidden border-t bg-white absolute top-full left-0 right-0 z-40 shadow-lg">
               <div className="px-2 pt-2 pb-3 space-y-1">
                 {navigationItems.map((item) => (
-                  <Link
+                  <button
                     key={item.name}
-                    href={item.href}
-                    className={`block px-3 py-2 rounded-md text-base font-medium transition-colors ${
+                    onClick={() => handleNavClick(item.href)}
+                    className={`block w-full text-left px-3 py-2 rounded-md text-base font-medium transition-colors ${
                       (item.exact
                         ? router.pathname === item.href
                         : router.pathname.startsWith(item.href))
                         ? "text-[#2F674A] bg-green-50"
                         : "text-gray-700 hover:text-[#2F674A] hover:bg-gray-50"
                     }`}
-                    onClick={() => setIsOpen(false)}
                   >
                     {item.name}
-                  </Link>
+                  </button>
                 ))}
 
                 {user ? (
@@ -219,12 +252,18 @@ export default function Navbar() {
                       </p>
                       <p className="text-sm text-gray-500">{user.email}</p>
                     </div>
-                    <Link href="/profile" className="block px-3 py-2 text-base text-gray-700 hover:text-[#2F674A] hover:bg-gray-50 transition-colors">
+                    <button
+                      onClick={() => handleNavClick('/profile')}
+                      className="block w-full text-left px-3 py-2 text-base text-gray-700 hover:text-[#2F674A] hover:bg-gray-50 transition-colors"
+                    >
                       My Profile
-                    </Link>
-                    <Link href="/orders" className="block px-3 py-2 text-base text-gray-700 hover:text-[#2F674A] hover:bg-gray-50 transition-colors">
+                    </button>
+                    <button
+                      onClick={() => handleNavClick('/orders')}
+                      className="block w-full text-left px-3 py-2 text-base text-gray-700 hover:text-[#2F674A] hover:bg-gray-50 transition-colors"
+                    >
                       My Orders
-                    </Link>
+                    </button>
                     <button
                       onClick={handleSignOut}
                       className="block w-full text-left px-3 py-2 text-base text-red-600 hover:bg-red-50 transition-colors"
@@ -234,12 +273,18 @@ export default function Navbar() {
                   </div>
                 ) : (
                   <div className="border-t mt-4 pt-4 space-y-2">
-                    <Link href="/login" className="block" onClick={() => setIsOpen(false)}>
-                      <ButtonDemo label="Login" bgColor="green" className="w-full" />
-                    </Link>
-                    <Link href="/register" className="block" onClick={() => setIsOpen(false)}>
-                      <ButtonDemo label="Sign Up" bgColor="black" className="w-full" />
-                    </Link>
+                    <button
+                      onClick={() => handleNavClick('/login')}
+                      className="block w-full text-center px-3 py-2 text-sm bg-[#2F674A] text-white hover:bg-green-700 rounded transition-colors font-medium"
+                    >
+                      Login
+                    </button>
+                    <button
+                      onClick={() => handleNavClick('/register')}
+                      className="block w-full text-center px-3 py-2 text-sm bg-black text-white hover:bg-gray-800 rounded transition-colors font-medium"
+                    >
+                      Sign Up
+                    </button>
                   </div>
                 )}
               </div>
