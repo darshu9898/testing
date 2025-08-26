@@ -93,7 +93,14 @@
       <div class="bg-white rounded-lg shadow p-4">
         <div class="flex items-center justify-between mb-3">
           <h3 class="text-lg font-semibold">📦 Products</h3>
-          <div class="text-sm text-gray-500">Results: <span id="productCount">0</span></div>
+          <div class="flex items-center gap-3">
+            <div class="text-sm text-gray-500">Results: <span id="productCount">0</span></div>
+            <!-- ✅ New Create Product Button -->
+            <button onclick="openCreateProductModal()" 
+              class="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700">
+              ➕ Create
+            </button>
+          </div>
         </div>
 
         <div class="table-scroll border rounded-md">
@@ -167,36 +174,37 @@
   </div>
 
   <!-- Product Edit Modal -->
-  <div id="productEditModal" class="fixed inset-0 flex items-center justify-center modal-backdrop hidden z-50" role="dialog" aria-modal="true">
-    <div class="bg-white rounded-lg shadow-lg w-full max-w-2xl p-6">
-      <div class="flex justify-between items-center mb-4">
-        <h3 class="text-lg font-semibold">Edit Product</h3>
-        <button class="text-gray-600 hover:text-gray-900" onclick="closeProductModal()">✕</button>
+  <!-- Create Product Modal -->
+<div id="productCreateModal" class="fixed inset-0 flex items-center justify-center modal-backdrop hidden z-50" role="dialog" aria-modal="true">
+  <div class="bg-white rounded-lg shadow-lg w-full max-w-2xl p-6">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="text-lg font-semibold">Create Product</h3>
+      <button class="text-gray-600 hover:text-gray-900" onclick="closeCreateProductModal()">✕</button>
+    </div>
+
+    <form id="productCreateForm" onsubmit="event.preventDefault(); submitProductCreate();" class="space-y-3">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <label class="block text-sm">Name
+          <input id="createProductName" class="w-full px-3 py-2 border rounded" type="text" required />
+        </label>
+        <label class="block text-sm">Stock
+          <input id="createProductStock" class="w-full px-3 py-2 border rounded" type="number" />
+        </label>
+        <label class="block text-sm md:col-span-2">Description
+          <textarea id="createProductDescription" class="w-full px-3 py-2 border rounded" rows="4"></textarea>
+        </label>
       </div>
 
-      <form id="productEditForm" onsubmit="event.preventDefault(); submitProductEdit();" class="space-y-3">
-        <input type="hidden" id="editProductId" />
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <label class="block text-sm">Name
-            <input id="editProductName" class="w-full px-3 py-2 border rounded" type="text" />
-          </label>
-          <label class="block text-sm">Stock
-            <input id="editProductStock" class="w-full px-3 py-2 border rounded" type="number" />
-          </label>
-          <label class="block text-sm md:col-span-2">Description
-            <textarea id="editProductDescription" class="w-full px-3 py-2 border rounded" rows="4"></textarea>
-          </label>
-        </div>
+      <div id="productCreateErrors" class="text-sm text-red-600"></div>
 
-        <div id="productEditErrors" class="text-sm text-red-600"></div>
-
-        <div class="flex justify-end gap-2 mt-4">
-          <button type="button" onclick="closeProductModal()" class="px-4 py-2 rounded bg-gray-200">Cancel</button>
-          <button id="productUpdateBtn" type="submit" class="px-4 py-2 rounded bg-green-600 text-white">Update</button>
-        </div>
-      </form>
-    </div>
+      <div class="flex justify-end gap-2 mt-4">
+        <button type="button" onclick="closeCreateProductModal()" class="px-4 py-2 rounded bg-gray-200">Cancel</button>
+        <button type="submit" class="px-4 py-2 rounded bg-blue-600 text-white">Create</button>
+      </div>
+    </form>
   </div>
+</div>
+
 
   <!-- Toast -->
   <div id="toast" class="toast hidden"></div>
@@ -574,6 +582,51 @@
         showToast('Failed to update product', 'error');
       }
     }
+    function openCreateProductModal() {
+  document.getElementById('createProductName').value = '';
+  document.getElementById('createProductDescription').value = '';
+  document.getElementById('createProductStock').value = '';
+  document.getElementById('productCreateErrors').textContent = '';
+  document.getElementById('productCreateModal').classList.remove('hidden');
+}
+
+function closeCreateProductModal() {
+  document.getElementById('productCreateModal').classList.add('hidden');
+}
+
+async function submitProductCreate() {
+  const name = document.getElementById('createProductName').value.trim();
+  const desc = document.getElementById('createProductDescription').value.trim();
+  const stockRaw = document.getElementById('createProductStock').value.trim();
+
+  const errors = [];
+  if (!name) errors.push('Name is required');
+  if (stockRaw && isNaN(stockRaw)) errors.push('Stock must be numeric');
+  if (errors.length) {
+    document.getElementById('productCreateErrors').textContent = errors.join(' • ');
+    return;
+  }
+
+  const body = {
+    productName: name,
+    productDescription: desc === '' ? null : desc,
+    productStock: stockRaw === '' ? null : Number(stockRaw)
+  };
+
+  const res = await makeRequest(`/api/admin/products`, {
+    method: 'POST',
+    body: JSON.stringify(body)
+  });
+  if (res && res.ok) {
+    productsCache.push(body);
+    renderProducts(productsCache);
+    closeCreateProductModal();
+    showToast('Product created', 'success');
+  } else {
+    showToast('Failed to create product', 'error');
+  }
+}
+
 
     // Search helpers
     function applySearch() {

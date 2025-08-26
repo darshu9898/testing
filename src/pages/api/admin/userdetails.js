@@ -1,8 +1,11 @@
+// 3. Enhanced admin userdetails API - src/pages/api/admin/userdetails.js
 // src/pages/api/admin/userdetails.js
 import prisma from '@/lib/prisma'
 import { requireAdminAuth } from '@/lib/adminAuth'
 
 export default async function handler(req, res) {
+  console.log(`📥 Admin userdetails request: ${req.method} ${req.url}`)
+  
   try {
     // Only allow GET method
     if (req.method !== 'GET') {
@@ -13,6 +16,8 @@ export default async function handler(req, res) {
     if (!requireAdminAuth(req, res)) {
       return // requireAdminAuth already sent the error response
     }
+
+    console.log('🔍 Fetching users from database...')
 
     // Get all users with their order summary
     const users = await prisma.users.findMany({
@@ -39,6 +44,8 @@ export default async function handler(req, res) {
       }
     })
 
+    console.log(`📊 Found ${users.length} users`)
+
     // Transform data to include useful summary info
     const userSummary = users.map(user => {
       const totalSpent = user.orders.reduce((sum, order) => sum + order.orderAmount, 0)
@@ -62,6 +69,8 @@ export default async function handler(req, res) {
       }
     })
 
+    console.log('✅ Users data processed successfully')
+
     return res.status(200).json({
       success: true,
       totalUsers: users.length,
@@ -69,7 +78,7 @@ export default async function handler(req, res) {
     })
 
   } catch (error) {
-    console.error('Admin userdetails error:', error)
+    console.error('💥 Admin userdetails error:', error)
     return res.status(500).json({ error: 'Internal server error' })
   }
 }
