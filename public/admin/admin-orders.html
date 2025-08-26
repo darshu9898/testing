@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin — Orders</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .loading { animation: spin 1s linear infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .scroll-y { max-height: 60vh; overflow-y: auto; }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen">
+  <div class="container mx-auto p-6">
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold">🧾 Orders</h1>
+        <p class="text-sm text-gray-500">Nicely formatted order details — click an order to expand items.</p>
+      </div>
+      <div class="flex gap-2 items-center">
+        <button id="backBtn" class="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300">← Back</button>
+        <div id="loginHint" class="text-sm text-red-600 hidden">Please login from the Admin Dashboard first.</div>
+      </div>
+    </div>
+
+    <div class="flex gap-4 mb-4">
+      <div class="flex items-center gap-2">
+        <span class="text-sm text-gray-600">Filter:</span>
+        <select id="statusFilter" class="px-2 py-1 border rounded">
+          <option value="">All</option>
+          <option value="pending">Pending</option>
+          <option value="processing">Processing</option>
+          <option value="shipped">Shipped</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+      </div>
+
+      <div class="flex items-center gap-2 ml-auto">
+        <input id="searchOrders" placeholder="Search order id / user / product..." class="px-3 py-1 border rounded" />
+        <button id="applyFilter" class="px-3 py-1 bg-blue-600 text-white rounded">Apply</button>
+        <button id="refreshBtn" class="px-3 py-1 bg-gray-200 rounded">Refresh</button>
+      </div>
+    </div>
+
+    <div id="ordersContainer" class="space-y-4">
+      <!-- Order cards will be injected here -->
+    </div>
+
+    <div id="emptyState" class="hidden mt-6 p-4 bg-white border rounded text-center text-gray-600">No orders found.</div>
+
+    <div class="mt-6">
+      <h2 class="text-lg font-semibold mb-2">Raw API Response</h2>
+      <pre id="rawResponse" class="bg-white p-3 border rounded text-xs font-mono whitespace-pre-wrap max-h-48 overflow-auto"></pre>
+    </div>
+  </div>
+
+  <script>
+    const baseUrl = window.location.origin;
+    const params = new URLSearchParams(window.location.search);
+    const requestedUserId = params.get('userId');
+
+    // token stored in localStorage by testadmin.html flow
+    let adminToken = null;
+    try { adminToken = localStorage.getItem('adminToken'); } catch(e) { adminToken = null; }
+
+    document.getElementById('backBtn').addEventListener('click', () => {
+      window.history.back();
+    });
+
+    document.getElementById('refreshBtn').addEventListener('click', loadOrders);
+    document.getElementById('applyFilter').addEventListener('click', loadOrders);
+
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
+        .replaceAll('"','&quot;').replaceAll("'",'&#039;');
+    }
+
+    function formatCurrency(n) {
+      try { return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(Number(n || 0)); }
+      catch { return String(n || 0); }
+    }
+
+    function formatDate(iso) {
+      if (!iso) return '—';
+      const d = new Date(iso);
+      if (isNaN(d)) return iso;
+      return d.toLocaleString();
+    }
+
+    function showLoginHint() {
+      document.getElementById('loginHint').classList.remove('hidden');
+    }
+
+    async function apiGET(path) {
+      if (!adminToken) {
+        showLoginHint();
+        return { ok: false, status: 401, data: { error: 'Missing admin token' } };
+      }
+      try {
+        const res = await fetch(path, {
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` }
+        });
+        const text = await res.text();
+        let data;
+        try { data = JSON.parse(text); } catch (e) { data = { text }; }
+        return { ok: res.ok, status: res.status, data };
+      } catch (err) {
+        return { ok: false, status: 0, data: { error: err.message } };
+      }
+    }
+
+    async function loadOrders() {
+      const status = document.getElementById('statusFilter').value;
+      const q = (document.getElementById('searchOrders').value || '').trim().toLowerCase();
+
+      let endpoint = '/api/admin/orders';
+      if (requestedUserId) endpoint += `?userId=${encodeURIComponent(requestedUserId)}`;
+      if (status) endpoint += (endpoint.includes('?') ? '&' : '?') + `status=${encodeURIComponent(status)}`;
+
+      const res = await apiGET(baseUrl + endpoint);
+      document.getElementById('rawResponse').textContent = JSON.stringify(res, null, 2);
+
+      if (!res.ok) {
+        document.getElementById('ordersContainer').innerHTML = '';
+        document.getElementById('emptyState').classList.remove('hidden');
+        return;
+      }
+
+      // Normalize orders array: support several payload shapes
+      let orders = res.data.orders || res.data.data || res.data || [];
+      if (!Array.isArray(orders)) orders = [orders];
+
+      // client-side search filter
+      if (q) {
+        orders = orders.filter(o => {
+          const hay = `${o.orderId ?? o.id ?? ''} ${o.userName ?? o.name ?? ''} ${(o.items || o.products || []).map(i => i.productName || i.name || '').join(' ')}`.toLowerCase();
+          return hay.includes(q);
+        });
+      }
+
+      renderOrders(orders);
+    }
+
+    function buildItemRow(item) {
+      const name = escapeHtml(item.productName ?? item.name ?? 'Unnamed');
+      const sku = escapeHtml(item.sku ?? item.productId ?? '');
+      const qty = item.quantity ?? item.qty ?? 0;
+      const unit = item.unitPrice ?? item.price ?? item.unit ?? 0;
+      const lineTotal = item.lineTotal ?? (qty * unit);
+      return `
+        <tr class="border-b">
+          <td class="p-2 text-sm">${name}<div class="text-xs text-gray-500">${sku}</div></td>
+          <td class="p-2 text-sm text-center">${qty}</td>
+          <td class="p-2 text-sm text-right">${formatCurrency(unit)}</td>
+          <td class="p-2 text-sm text-right font-semibold">${formatCurrency(lineTotal)}</td>
+        </tr>
+      `;
+    }
+
+    function renderOrders(orders) {
+      const container = document.getElementById('ordersContainer');
+      container.innerHTML = '';
+
+      if (!orders || orders.length === 0) {
+        document.getElementById('emptyState').classList.remove('hidden');
+        return;
+      } else {
+        document.getElementById('emptyState').classList.add('hidden');
+      }
+
+      orders.forEach(o => {
+        const orderId = o.orderId ?? o.id ?? o._id ?? '—';
+        const user = o.userName ?? o.customerName ?? (o.user?.name) ?? (o.user?.userName) ?? 'Unknown';
+        const phone = o.userPhone ?? o.contact ?? o.user?.phone ?? '';
+        const address = o.shippingAddress ?? o.address ?? o.userAddress ?? (o.user?.address) ?? '';
+        const created = o.createdAt ?? o.created_at ?? o.date ?? o.orderDate ?? null;
+        const status = (o.status || 'pending').toString();
+        const items = o.items ?? o.products ?? o.lineItems ?? [];
+        const total = o.total ?? o.amount ?? o.orderTotal ?? items.reduce((s, it) => s + ((it.lineTotal ?? (it.quantity * (it.unitPrice ?? it.price ?? 0))) || 0), 0);
+
+        // Transform items if they are encoded as JSON string (sometimes APIs return JSON in DB)
+        let parsedItems = items;
+        if (typeof items === 'string') {
+          try { parsedItems = JSON.parse(items); } catch (e) { parsedItems = []; }
+        }
+
+        const itemRows = parsedItems.map(buildItemRow).join('') || '<tr><td colspan="4" class="p-2 text-sm text-center text-gray-500">No items</td></tr>';
+
+        const card = document.createElement('div');
+        card.className = 'bg-white border rounded shadow-sm p-4';
+        card.innerHTML = `
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <div class="text-sm text-gray-500">Order</div>
+              <div class="text-lg font-semibold">#${escapeHtml(String(orderId))}</div>
+              <div class="text-sm text-gray-600 mt-1">${escapeHtml(user)} ${phone ? ' • ' + escapeHtml(phone) : ''}</div>
+              <div class="text-xs text-gray-400 mt-1">${escapeHtml(address)}</div>
+            </div>
+
+            <div class="text-right">
+              <div class="text-sm text-gray-500">Placed</div>
+              <div class="text-sm font-medium">${formatDate(created)}</div>
+              <div class="mt-3">
+                <span class="px-2 py-1 rounded text-xs font-medium ${status === 'shipped' ? 'bg-green-100 text-green-700' : status === 'cancelled' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}">
+                  ${escapeHtml(status)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-4 border rounded overflow-hidden">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="p-2 text-left">Product</th>
+                  <th class="p-2 text-center">Qty</th>
+                  <th class="p-2 text-right">Unit</th>
+                  <th class="p-2 text-right">Line</th>
+                </tr>
+              </thead>
+              <tbody>${itemRows}</tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="3" class="p-2 text-right font-semibold">Total</td>
+                  <td class="p-2 text-right font-semibold">${formatCurrency(total)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div class="mt-3 flex items-center justify-between">
+            <div class="text-xs text-gray-500">Order meta: ${escapeHtml(JSON.stringify({ paymentMethod: o.paymentMethod, txnId: o.transactionId }, null, 0))}</div>
+            <div class="flex gap-2">
+              <button class="px-3 py-1 bg-blue-600 text-white rounded text-sm" onclick="openOrderDetail('${escapeHtml(orderId)}')">Open</button>
+              <button class="px-3 py-1 bg-green-600 text-white rounded text-sm" onclick="handleMarkShipped('${escapeHtml(orderId)}')">Mark Shipped</button>
+            </div>
+          </div>
+        `;
+
+        container.appendChild(card);
+      });
+    }
+
+    // placeholder - open a detailed modal or separate page for one order (optional)
+    function openOrderDetail(orderId) {
+      // Could open a modal; for now we navigate to deeper link
+      window.location.href = `/admin/order-detail.html?orderId=${encodeURIComponent(orderId)}`;
+    }
+
+    async function handleMarkShipped(orderId) {
+      if (!confirm('Mark order ' + orderId + ' as shipped?')) return;
+      // call a server endpoint to update order status - adapt path to your API
+      const res = await fetch(`${baseUrl}/api/admin/orders/mark-shipped`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+        body: JSON.stringify({ orderId })
+      });
+      const text = await res.text();
+      let data; try { data = JSON.parse(text); } catch(e){ data = { text } }
+      alert((data?.message) || (data?.error) || 'Action completed');
+      loadOrders();
+    }
+
+    // initial load
+    (function init() {
+      if (!adminToken) {
+        showLoginHint();
+      }
+      // if requestedUserId is present, prefill search and load
+      if (requestedUserId) {
+        document.getElementById('searchOrders').value = requestedUserId;
+      }
+      loadOrders();
+    })();
+  </script>
+</body>
+</html>
