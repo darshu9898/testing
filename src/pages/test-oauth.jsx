@@ -36,7 +36,7 @@ export default function TestOAuth() {
 
   return (
     <div style={{ padding: '2rem', fontFamily: 'monospace' }}>
-      <h1>OAuth Testing Page</h1>
+      <h1 className = 'text-black'>OAuth Testing Page</h1>
       
       <div style={{ marginBottom: '1rem' }}>
         <button 
@@ -76,7 +76,8 @@ export default function TestOAuth() {
           padding: '1rem', 
           backgroundColor: '#f5f5f5',
           borderRadius: '4px',
-          maxWidth: '600px'
+          maxWidth: '600px',
+          color: 'black'
         }}>
           <h3>Result:</h3>
           <pre style={{ whiteSpace: 'pre-wrap', fontSize: '12px' }}>
