@@ -56,8 +56,11 @@ export async function middleware(req) {
   if (pathname.match(/\.[a-zA-Z0-9]{1,6}$/)) {
     return res
   }
+  if (pathname === '/admin/orders.html') {
+  return res; // skip auth for this page
+}
   // Protected routes that require authentication
-  const protectedRoutes = ['/dashboard', '/profile', '/orders', '/admin']
+  const protectedRoutes = ['/dashboard', '/profile', '/orders']
   
   // Auth routes (redirect if already logged in)
   const authRoutes = ['/login', '/register']

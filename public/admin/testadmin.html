@@ -498,7 +498,7 @@
           <td class="p-2 align-top text-sm">${ordersCount}</td>
           <td class="p-2 align-top">
             <div class="flex gap-2">
-              <button class="px-2 py-1 bg-blue-500 text-white text-xs rounded" onclick="goToOrdersPage('${userId}')">View Orders</button>
+              <button type ="button" class="px-2 py-1 bg-blue-500 text-white text-xs rounded" onclick="goToOrdersPage('${userId}')">View Orders</button>
               <button class="px-2 py-1 bg-yellow-500 text-white text-xs rounded" onclick="openUserModal('${userId}')">Edit</button>
               <button class="px-2 py-1 bg-red-500 text-white text-xs rounded" onclick="deleteUserAction('${userId}', this)">Delete</button>
             </div>
@@ -790,11 +790,31 @@ async function submitCreateProduct() {
 }
 
     // Search helpers
-    function goToOrdersPage(userId) {
-      const url = userId ? `/admin/orders.html?userId=${encodeURIComponent(userId)}` : '/admin/orders.html';
-      // preserve token by keeping it in localStorage (already done). Redirect now.
-      window.location.href = url;
-    }
+function goToOrdersPage(userId) {
+  const url = userId
+    ? `/admin/orders.html?userId=${encodeURIComponent(userId)}`
+    : '/admin/orders.html';
+
+  // Try window.open first (works in direct click handlers)
+  const newWin = window.open(url, '_blank', 'noopener,noreferrer');
+
+  if (newWin) {
+    try { newWin.focus(); } catch (e) { /* some browsers disallow focus */ }
+    return;
+  }
+
+  // Fallback: create an <a> and click it (still should be in click handler)
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+
 
     function applySearch() {
       const q = (document.getElementById('globalSearch').value || '').trim().toLowerCase();
