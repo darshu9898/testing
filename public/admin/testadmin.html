@@ -229,6 +229,7 @@
 
   <script>
     let adminToken = null;
+    
     const baseUrl = window.location.origin;
 
     // Loading / Response helpers
@@ -249,6 +250,33 @@
       setTimeout(() => t.classList.add('hidden'), 3500);
     }
 
+    // Robust token extraction from response body or headers
+    function extractTokenFromResponse(res, body) {
+      if (!res) return null;
+      const candidates = [body?.token, body?.adminToken, body?.accessToken, body?.tokenValue, body?.data?.token];
+      for (const c of candidates) if (c && typeof c === 'string') return c;
+
+      const auth = res.headers.get('authorization') || res.headers.get('Authorization');
+      if (auth) {
+        if (auth.startsWith('Bearer ')) return auth.replace('Bearer ', '').trim();
+        return auth.trim();
+      }
+      const x = res.headers.get('x-admin-token') || res.headers.get('x-admin-token'.toLowerCase());
+      if (x) return x.trim();
+      return null;
+    }
+
+    function showTokenUI(token, expiresAt) {
+      if (!token) return;
+      adminToken = token;
+      try { localStorage.setItem('adminToken', token); } catch (e) { /* ignore */ }
+      document.getElementById('tokenValue').textContent = token;
+      const expiryText = expiresAt ? new Date(expiresAt).toLocaleString() : new Date(Date.now() + 2*60*60*1000).toLocaleString();
+      document.getElementById('expiryTime').textContent = expiryText;
+      document.getElementById('tokenDisplay').classList.remove('hidden');
+      document.getElementById('loginShort').classList.add('hidden');
+    }
+
     // LOGIN MODAL controls
     function openLoginModal() {
       document.getElementById('loginError').textContent = '';
@@ -261,6 +289,7 @@
       document.getElementById('loginModal').classList.add('hidden');
     }
 
+    // updated submitLogin - tolerant to token location
     async function submitLogin() {
       const adminId = document.getElementById('modalAdminId').value.trim();
       const adminPassword = document.getElementById('modalAdminPassword').value;
@@ -278,22 +307,42 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ adminId, adminPassword })
         });
-        const data = await res.json();
+
+        let data = {};
+        try { data = await res.json(); } catch (e) { data = {}; }
         displayResponse({ status: res.status, ...data }, res.ok ? 'success' : 'error');
 
-        if (res.ok && data.success && data.token) {
-          adminToken = data.token;
-          document.getElementById('tokenValue').textContent = data.token;
-          document.getElementById('expiryTime').textContent = new Date(data.expiresAt || Date.now() + 3600*1000).toLocaleString();
-          document.getElementById('tokenDisplay').classList.remove('hidden');
-          document.getElementById('loginShort').classList.add('hidden');
+        const token = extractTokenFromResponse(res, data);
+        const expiresAt = data?.expiresAt || data?.expires_at || data?.expires || null;
+
+        if (res.ok && token) {
+          showTokenUI(token, expiresAt);
           closeLoginModal();
           showToast('Logged in', 'success');
-        } else {
-          const errMsg = data.error || data.message || 'Login failed';
-          document.getElementById('loginError').textContent = errMsg;
-          showToast('Login failed', 'error');
+          return;
         }
+
+        if (res.ok && data?.success === true) {
+          if (token) {
+            showTokenUI(token, expiresAt);
+            closeLoginModal();
+            showToast('Logged in', 'success');
+            return;
+          }
+          // server accepted but no token visible to frontend
+          document.getElementById('loginError').textContent = 'Login OK but no token returned by server';
+          showToast('Login OK but no token returned', 'error');
+          console.warn('Login response had no token (body, headers):', data, {
+            authHeader: res.headers.get('authorization'),
+            xAdminToken: res.headers.get('x-admin-token')
+          });
+          return;
+        }
+
+        const errMsg = data?.error || data?.message || (res.status === 401 ? 'Invalid credentials' : 'Login failed');
+        document.getElementById('loginError').textContent = errMsg;
+        showToast(errMsg, 'error');
+
       } catch (err) {
         displayResponse({ error: err.message }, 'error');
         document.getElementById('loginError').textContent = 'Network error';
@@ -303,29 +352,41 @@
       }
     }
 
-    // Auth logout
+    // Auth logout - clear localStorage and inform server if possible
     async function adminLogout() {
-      if (!adminToken) return;
+      const tokenToSend = adminToken || (() => { try { return localStorage.getItem('adminToken'); } catch(e){ return null } })();
+      if (!tokenToSend) {
+        adminToken = null;
+        try { localStorage.removeItem('adminToken'); } catch (e) {}
+        document.getElementById('tokenDisplay').classList.add('hidden');
+        document.getElementById('loginShort').classList.remove('hidden');
+        showToast('Logged out', 'success');
+        return;
+      }
+
       try {
         const res = await fetch(`${baseUrl}/api/admin/logout`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` }
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenToSend}` }
         });
-        const data = await res.json();
+        let data = {};
+        try { data = await res.json(); } catch (e) { data = {}; }
         displayResponse({ status: res.status, ...data }, res.ok ? 'success' : 'error');
       } catch (err) {
         displayResponse({ error: err.message }, 'error');
       } finally {
         adminToken = null;
+        try { localStorage.removeItem('adminToken'); } catch (e) {}
         document.getElementById('tokenDisplay').classList.add('hidden');
         document.getElementById('loginShort').classList.remove('hidden');
         showToast('Logged out', 'success');
       }
     }
 
-    // Generic request helper (requires adminToken)
+    // Generic request helper (uses persisted token if available)
     async function makeRequest(endpoint, options = {}) {
-      if (!adminToken) {
+      const tokenToUse = adminToken || (() => { try { return localStorage.getItem('adminToken'); } catch(e){ return null } })();
+      if (!tokenToUse) {
         showToast('Please login first', 'error');
         return null;
       }
@@ -333,7 +394,7 @@
       try {
         const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${endpoint}`;
         const res = await fetch(url, {
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}`, ...(options.headers || {}) },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenToUse}`, ...(options.headers || {}) },
           ...options
         });
         const text = await res.text();
@@ -355,7 +416,7 @@
     let productsCache = [];
 
     async function showUsers() {
-      if (!adminToken) return showToast('Login required', 'error');
+      if (!adminToken && !localStorage.getItem('adminToken')) return showToast('Login required', 'error');
       const result = await makeRequest('/api/admin/userdetails');
       if (!result || !result.ok) return;
       const payload = result.data;
@@ -506,7 +567,7 @@
 
     // Products
     async function showProducts() {
-      if (!adminToken) return showToast('Login required', 'error');
+      if (!adminToken && !localStorage.getItem('adminToken')) return showToast('Login required', 'error');
       const res = await makeRequest('/api/admin/products');
       if (!res || !res.ok) return;
       const payload = res.data;
@@ -664,8 +725,14 @@
     // helper escape
     function escapeHtml(str) { if (str === null || str === undefined) return ''; return String(str).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;'); }
 
-    // init
-    document.addEventListener('DOMContentLoaded', function() { displayResponse({ message: '👋 Welcome! Click Login to open the admin login modal.' }); });
+    // init - restore token if present
+    document.addEventListener('DOMContentLoaded', function() {
+      try {
+        const saved = localStorage.getItem('adminToken');
+        if (saved) showTokenUI(saved, null);
+      } catch (e) { /* ignore */ }
+      displayResponse({ message: '👋 Welcome! Click Login to open the admin login modal.' });
+    });
 
     // close modals on Escape
     document.addEventListener('keydown', (e) => {

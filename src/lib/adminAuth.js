@@ -1,4 +1,6 @@
-// src/lib/adminAuth.js
+// src/lib/adminAuth.js - Database-based session management
+
+import prisma from './prisma'
 
 const ADMIN_CREDENTIALS = {
   id: "admin123",
@@ -8,14 +10,21 @@ const ADMIN_CREDENTIALS = {
 // Admin session duration (in milliseconds) - 2 hours
 const SESSION_DURATION = 2 * 60 * 60 * 1000
 
-// In-memory session store (in production, use Redis or database)
-const adminSessions = new Map()
-
 /**
- * Generate a simple session token
+ * Generate a cryptographically secure session token
  */
 function generateSessionToken() {
-  return Math.random().toString(36).substring(2) + Date.now().toString(36)
+  // Use crypto for better randomness
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const array = new Uint8Array(32)
+    crypto.getRandomValues(array)
+    return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('')
+  }
+  
+  // Fallback for older environments
+  return Math.random().toString(36).substring(2) + 
+         Date.now().toString(36) + 
+         Math.random().toString(36).substring(2)
 }
 
 /**
@@ -27,28 +36,123 @@ export function validateAdminCredentials(adminId, adminPassword) {
 }
 
 /**
- * Create admin session after successful login
+ * Create admin session in database after successful login
  */
-export function createAdminSession() {
+export async function createAdminSession() {
   const token = generateSessionToken()
-  const expiresAt = Date.now() + SESSION_DURATION
+  const expiresAt = new Date(Date.now() + SESSION_DURATION)
   
-  adminSessions.set(token, {
-    createdAt: Date.now(),
-    expiresAt,
-    isAdmin: true,
-    lastAccess: Date.now() // Track last access for debugging
-  })
+  try {
+    // Clean up any expired sessions first
+    await cleanupExpiredSessions()
+    
+    // Create new session in database
+    await prisma.$executeRaw`
+      INSERT INTO admin_sessions (token, expires_at, created_at, last_access)
+      VALUES (${token}, ${expiresAt}, NOW(), NOW())
+      ON CONFLICT (token) DO NOTHING
+    `
+    
+    console.log(`✅ Admin session created in DB: ${token.substring(0, 8)}..., expires: ${expiresAt}`)
+    
+    return {
+      token,
+      expiresAt
+    }
+  } catch (error) {
+    console.error('Failed to create admin session in database:', error)
+    throw new Error('Session creation failed')
+  }
+}
+
+/**
+ * Validate admin session token from database
+ */
+export async function validateAdminSession(token) {
+  if (!token || typeof token !== 'string') {
+    console.log('❌ Invalid token format:', { token: typeof token, length: token?.length })
+    return false
+  }
   
-  // Clean up expired sessions
-  cleanupExpiredSessions()
+  try {
+    // Get session from database
+    const session = await prisma.$queryRaw`
+      SELECT token, expires_at, created_at, last_access
+      FROM admin_sessions 
+      WHERE token = ${token} 
+      AND expires_at > NOW()
+      LIMIT 1
+    `
+    
+    if (!session || session.length === 0) {
+      console.log(`❌ Session not found or expired for token: ${token.substring(0, 8)}...`)
+      return false
+    }
+    
+    const sessionData = session[0]
+    const now = new Date()
+    const expiresAt = new Date(sessionData.expires_at)
+    
+    if (now > expiresAt) {
+      console.log(`⏰ Session expired for token: ${token.substring(0, 8)}... (expired ${expiresAt})`)
+      // Clean up expired session
+      await prisma.$executeRaw`DELETE FROM admin_sessions WHERE token = ${token}`
+      return false
+    }
+    
+    // Update last access time
+    await prisma.$executeRaw`
+      UPDATE admin_sessions 
+      SET last_access = NOW() 
+      WHERE token = ${token}
+    `
+    
+    const timeLeft = Math.round((expiresAt - now) / (1000 * 60)) // minutes
+    console.log(`✅ Valid session found in DB for token: ${token.substring(0, 8)}... (${timeLeft} minutes left)`)
+    return true
+    
+  } catch (error) {
+    console.error('Database session validation error:', error)
+    return false
+  }
+}
+
+/**
+ * Destroy admin session (logout) from database
+ */
+export async function destroyAdminSession(token) {
+  if (!token) {
+    console.log('⚠️ No token provided for session destruction')
+    return false
+  }
   
-  console.log(`✅ Admin session created: ${token.substring(0, 8)}..., expires: ${new Date(expiresAt)}`)
-  console.log(`📊 Active sessions: ${adminSessions.size}`)
-  
-  return {
-    token,
-    expiresAt: new Date(expiresAt)
+  try {
+    const result = await prisma.$executeRaw`
+      DELETE FROM admin_sessions WHERE token = ${token}
+    `
+    
+    console.log(`🚪 Admin session destroyed from DB: ${token.substring(0, 8)}...`)
+    return true
+  } catch (error) {
+    console.error('Failed to destroy session:', error)
+    return false
+  }
+}
+
+/**
+ * Clean up expired sessions from database
+ */
+async function cleanupExpiredSessions() {
+  try {
+    const result = await prisma.$executeRaw`
+      DELETE FROM admin_sessions WHERE expires_at < NOW()
+    `
+    
+    if (result > 0) {
+      console.log(`🧹 Cleaned up expired admin sessions from database`)
+    }
+  } catch (error) {
+    console.error('Failed to cleanup expired sessions:', error)
   }
 }
 
@@ -92,72 +196,9 @@ function extractToken(req) {
 }
 
 /**
- * Validate admin session token with enhanced logging
- */
-export function validateAdminSession(token) {
-  if (!token || typeof token !== 'string') {
-    console.log('❌ Invalid token format:', { token: typeof token, length: token?.length })
-    return false
-  }
-  
-  const session = adminSessions.get(token)
-  if (!session) {
-    console.log(`❌ Session not found for token: ${token.substring(0, 8)}...`)
-    console.log(`📊 Available sessions: ${Array.from(adminSessions.keys()).map(k => k.substring(0, 8) + '...').join(', ')}`)
-    return false
-  }
-  
-  // Check if session has expired
-  const now = Date.now()
-  if (now > session.expiresAt) {
-    console.log(`⏰ Session expired for token: ${token.substring(0, 8)}... (expired ${new Date(session.expiresAt)})`)
-    adminSessions.delete(token)
-    return false
-  }
-  
-  // Update last access time
-  session.lastAccess = now
-  adminSessions.set(token, session)
-  
-  const timeLeft = Math.round((session.expiresAt - now) / (1000 * 60)) // minutes
-  console.log(`✅ Valid session found for token: ${token.substring(0, 8)}... (${timeLeft} minutes left)`)
-  return true
-}
-
-/**
- * Destroy admin session (logout)
- */
-export function destroyAdminSession(token) {
-  if (token && adminSessions.has(token)) {
-    adminSessions.delete(token)
-    console.log(`🚪 Admin session destroyed: ${token.substring(0, 8)}...`)
-    return true
-  }
-  console.log(`⚠️ Attempted to destroy non-existent session: ${token?.substring(0, 8)}...`)
-  return false
-}
-
-/**
- * Clean up expired sessions
- */
-function cleanupExpiredSessions() {
-  const now = Date.now()
-  let cleanedCount = 0
-  for (const [token, session] of adminSessions) {
-    if (now > session.expiresAt) {
-      adminSessions.delete(token)
-      cleanedCount++
-    }
-  }
-  if (cleanedCount > 0) {
-    console.log(`🧹 Cleaned up ${cleanedCount} expired admin sessions`)
-  }
-}
-
-/**
  * Enhanced middleware to check admin authentication
  */
-export function requireAdminAuth(req, res) {
+export async function requireAdminAuth(req, res) {
   const startTime = Date.now()
   console.log(`🔐 Admin auth check started for ${req.method} ${req.url}`)
   
@@ -169,7 +210,6 @@ export function requireAdminAuth(req, res) {
     url: req.url,
     hasToken: !!token,
     tokenLength: token?.length || 0,
-    activeSessions: adminSessions.size,
     userAgent: req.headers['user-agent']?.substring(0, 50) + '...'
   })
 
@@ -185,7 +225,8 @@ export function requireAdminAuth(req, res) {
     })
   }
 
-  if (!validateAdminSession(token)) {
+  const isValid = await validateAdminSession(token)
+  if (!isValid) {
     console.log('❌ Admin authentication failed - invalid or expired token')
     return res.status(401).json({ 
       error: 'Unauthorized', 
@@ -194,9 +235,7 @@ export function requireAdminAuth(req, res) {
       debug: process.env.NODE_ENV === 'development' ? {
         tokenProvided: !!token,
         tokenLength: token?.length || 0,
-        tokenPrefix: token?.substring(0, 8) + '...',
-        activeSessions: adminSessions.size,
-        availableSessions: Array.from(adminSessions.keys()).map(k => k.substring(0, 8) + '...')
+        tokenPrefix: token?.substring(0, 8) + '...'
       } : undefined
     })
   }
@@ -207,42 +246,100 @@ export function requireAdminAuth(req, res) {
 }
 
 /**
- * Get session info with enhanced details
+ * Get session info from database
  */
-export function getSessionInfo(token) {
+export async function getSessionInfo(token) {
   if (!token) return null
   
-  const session = adminSessions.get(token)
-  if (!session || Date.now() > session.expiresAt) {
+  try {
+    const session = await prisma.$queryRaw`
+      SELECT token, expires_at, created_at, last_access
+      FROM admin_sessions 
+      WHERE token = ${token} 
+      AND expires_at > NOW()
+      LIMIT 1
+    `
+    
+    if (!session || session.length === 0) {
+      return null
+    }
+    
+    const sessionData = session[0]
+    const expiresAt = new Date(sessionData.expires_at)
+    const now = new Date()
+    
+    return {
+      token,
+      expiresAt,
+      remainingTime: expiresAt.getTime() - now.getTime(),
+      lastAccess: new Date(sessionData.last_access),
+      createdAt: new Date(sessionData.created_at),
+      isValid: expiresAt > now
+    }
+  } catch (error) {
+    console.error('Failed to get session info:', error)
     return null
-  }
-  
-  return {
-    token,
-    expiresAt: new Date(session.expiresAt),
-    remainingTime: session.expiresAt - Date.now(),
-    lastAccess: new Date(session.lastAccess),
-    isValid: true
   }
 }
 
 /**
- * Extend session expiry (optional utility)
+ * Extend session expiry in database
  */
-export function extendAdminSession(token, extraTimeMs = SESSION_DURATION) {
+export async function extendAdminSession(token, extraTimeMs = SESSION_DURATION) {
   if (!token) return false
   
-  const session = adminSessions.get(token)
-  if (!session) return false
-  
-  const newExpiresAt = Date.now() + extraTimeMs
-  session.expiresAt = newExpiresAt
-  session.lastAccess = Date.now()
-  adminSessions.set(token, session)
-  
-  console.log(`🔄 Extended session for token: ${token.substring(0, 8)}... until ${new Date(newExpiresAt)}`)
-  return true
+  try {
+    const newExpiresAt = new Date(Date.now() + extraTimeMs)
+    
+    const result = await prisma.$executeRaw`
+      UPDATE admin_sessions 
+      SET expires_at = ${newExpiresAt}, last_access = NOW()
+      WHERE token = ${token}
+      AND expires_at > NOW()
+    `
+    
+    if (result > 0) {
+      console.log(`🔄 Extended session in DB for token: ${token.substring(0, 8)}... until ${newExpiresAt}`)
+      return true
+    }
+    
+    return false
+  } catch (error) {
+    console.error('Failed to extend session:', error)
+    return false
+  }
 }
 
-// Cleanup expired sessions every 10 minutes
-setInterval(cleanupExpiredSessions, 10 * 60 * 1000)
+/**
+ * Get all active sessions (for admin monitoring)
+ */
+export async function getActiveSessions() {
+  try {
+    const sessions = await prisma.$queryRaw`
+      SELECT token, expires_at, created_at, last_access
+      FROM admin_sessions 
+      WHERE expires_at > NOW()
+      ORDER BY last_access DESC
+    `
+    
+    return sessions.map(session => ({
+      tokenPrefix: session.token.substring(0, 8) + '...',
+      expiresAt: new Date(session.expires_at),
+      createdAt: new Date(session.created_at),
+      lastAccess: new Date(session.last_access),
+      remainingTime: new Date(session.expires_at).getTime() - Date.now()
+    }))
+  } catch (error) {
+    console.error('Failed to get active sessions:', error)
+    return []
+  }
+}
+
+// Cleanup expired sessions every 15 minutes
+setInterval(async () => {
+  try {
+    await cleanupExpiredSessions()
+  } catch (error) {
+    console.error('Scheduled cleanup failed:', error)
+  }
+}, 15 * 60 * 1000)

@@ -109,3 +109,15 @@ model Category {
   categoryId   Int    @id @default(autoincrement())
   categoryName String
 }
+
+model AdminSessions {
+  id          Int      @id @default(autoincrement())
+  token       String   @unique
+  expires_at  DateTime
+  created_at  DateTime @default(now())
+  last_access DateTime @default(now())
+
+  @@index([expires_at])
+  @@index([last_access])
+  @@map("admin_sessions")
+}
