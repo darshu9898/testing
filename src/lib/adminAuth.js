@@ -3,7 +3,7 @@
 // Simple admin credentials - change these to your preferred values
 const ADMIN_CREDENTIALS = {
   id: "admin123",
-  password: "admin@2024"
+  password: "admin"
 }
 
 // Admin session duration (in milliseconds) - 2 hours

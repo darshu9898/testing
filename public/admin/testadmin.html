@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - API Tester</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .response-box {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .loading {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto p-6">
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h1 class="text-3xl font-bold text-gray-800 mb-4">🔧 Admin Dashboard - API Tester</h1>
+            
+            <!-- Login Section -->
+            <div id="loginSection" class="mb-6">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Admin ID</label>
+                        <input type="text" id="adminId" value="admin123" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                        <input type="password" id="adminPassword" value="admin@2024" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <button onclick="adminLogin()" class="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">
+                            🔐 Admin Login
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="tokenDisplay" class="mt-4 hidden">
+                    <div class="bg-green-50 border border-green-200 rounded-md p-4">
+                        <p class="text-green-800"><strong>Token:</strong> <span id="tokenValue" class="font-mono text-sm"></span></p>
+                        <p class="text-green-600 text-sm mt-1">Expires: <span id="expiryTime"></span></p>
+                        <button onclick="adminLogout()" class="mt-2 bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600">Logout</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Dashboard -->
+        <div id="dashboard" class="hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                <!-- User Management Section -->
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4">👥 User Management</h2>
+                    
+                    <!-- Get All Users -->
+                    <div class="mb-4">
+                        <button onclick="getAllUsers()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors">
+                            📊 Get All Users
+                        </button>
+                    </div>
+                    
+                    <!-- Get Specific User -->
+                    <div class="mb-4 border-t pt-4">
+                        <h3 class="font-semibold mb-2">Get Specific User</h3>
+                        <div class="flex gap-2">
+                            <input type="number" id="getUserId" placeholder="User ID" class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <button onclick="getUserById()" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                                👤 Get User
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Update User -->
+                    <div class="mb-4 border-t pt-4">
+                        <h3 class="font-semibold mb-2">Update User</h3>
+                        <div class="grid grid-cols-2 gap-2 mb-2">
+                            <input type="number" id="updateUserId" placeholder="User ID" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <input type="text" id="updateUserName" placeholder="Name" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 mb-2">
+                            <input type="email" id="updateUserEmail" placeholder="Email" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <input type="tel" id="updateUserPhone" placeholder="Phone" class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <input type="text" id="updateUserAddress" placeholder="Address" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2">
+                        <button onclick="updateUser()" class="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600">
+                            📝 Update User
+                        </button>
+                    </div>
+                    
+                    <!-- Delete User -->
+                    <div class="border-t pt-4">
+                        <h3 class="font-semibold mb-2">Delete User</h3>
+                        <div class="flex gap-2">
+                            <input type="number" id="deleteUserId" placeholder="User ID" class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <button onclick="deleteUser()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">
+                                🗑️ Delete User
+                            </button>
+                        </div>
+                        <p class="text-red-600 text-xs mt-1">⚠️ Only works if user has no orders</p>
+                    </div>
+                </div>
+                
+                <!-- Product Management Section -->
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4">📦 Product Management</h2>
+                    
+                    <!-- Update Product Stock -->
+                    <div class="mb-4">
+                        <h3 class="font-semibold mb-2">Update Product Stock</h3>
+                        <div class="flex gap-2 mb-2">
+                            <input type="number" id="productId" placeholder="Product ID" class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <input type="number" id="productStock" placeholder="New Stock" class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <button onclick="updateProductStock()" class="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600">
+                            📈 Update Stock
+                        </button>
+                    </div>
+                    
+                    <!-- Quick Stock Actions -->
+                    <div class="border-t pt-4">
+                        <h3 class="font-semibold mb-2">Quick Stock Actions</h3>
+                        <div class="flex gap-2 mb-2">
+                            <input type="number" id="quickProductId" placeholder="Product ID" class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="setStock(0)" class="bg-red-400 text-white px-3 py-1 rounded text-sm hover:bg-red-500">
+                                Out of Stock
+                            </button>
+                            <button onclick="setStock(10)" class="bg-yellow-400 text-white px-3 py-1 rounded text-sm hover:bg-yellow-500">
+                                Low Stock
+                            </button>
+                            <button onclick="setStock(100)" class="bg-green-400 text-white px-3 py-1 rounded text-sm hover:bg-green-500">
+                                High Stock
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Test All Products -->
+                    <div class="border-t pt-4 mt-4">
+                        <button onclick="testAllProducts()" class="bg-indigo-500 text-white px-4 py-2 rounded hover:bg-indigo-600">
+                            🧪 Test Multiple Products
+                        </button>
+                        <p class="text-gray-600 text-xs mt-1">Tests product IDs 1, 2, 3 with different stock levels</p>
+                    </div>
+                </div>
+                
+            </div>
+            
+            <!-- Response Section -->
+            <div class="bg-white rounded-lg shadow-lg p-6 mt-6">
+                <h2 class="text-xl font-bold text-gray-800 mb-4">📄 API Response</h2>
+                <div id="loading" class="hidden flex items-center justify-center p-4">
+                    <div class="loading w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full"></div>
+                    <span class="ml-2 text-blue-600">Loading...</span>
+                </div>
+                <div id="response" class="response-box bg-gray-50 border border-gray-200 rounded-md p-4 font-mono text-sm whitespace-pre-wrap"></div>
+                <div class="flex gap-2 mt-4">
+                    <button onclick="clearResponse()" class="bg-gray-500 text-white px-3 py-1 rounded text-sm hover:bg-gray-600">
+                        🗑️ Clear
+                    </button>
+                    <button onclick="copyResponse()" class="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">
+                        📋 Copy
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Test Suite Section -->
+            <div class="bg-white rounded-lg shadow-lg p-6 mt-6">
+                <h2 class="text-xl font-bold text-gray-800 mb-4">🧪 Test Suite</h2>
+                <div class="flex gap-2 flex-wrap">
+                    <button onclick="runAllTests()" class="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-2 rounded hover:from-purple-600 hover:to-pink-600">
+                        🚀 Run All Tests
+                    </button>
+                    <button onclick="testErrorCases()" class="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600">
+                        ❌ Test Error Cases
+                    </button>
+                    <button onclick="populateWithSampleData()" class="bg-teal-500 text-white px-4 py-2 rounded hover:bg-teal-600">
+                        📝 Fill Sample Data
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let adminToken = null;
+        const baseUrl = window.location.origin;
+
+        // Utility Functions
+        function showLoading() {
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('response').textContent = '';
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').classList.add('hidden');
+        }
+
+        function displayResponse(data, status = 'success') {
+            hideLoading();
+            const responseEl = document.getElementById('response');
+            const timestamp = new Date().toLocaleTimeString();
+            const statusColor = status === 'error' ? '🔴' : '🟢';
+            responseEl.textContent = `${statusColor} [${timestamp}]\n${JSON.stringify(data, null, 2)}`;
+        }
+
+        function clearResponse() {
+            document.getElementById('response').textContent = '';
+        }
+
+        function copyResponse() {
+            const responseEl = document.getElementById('response');
+            navigator.clipboard.writeText(responseEl.textContent);
+            alert('Response copied to clipboard!');
+        }
+
+        // Admin Authentication
+        async function adminLogin() {
+            const adminId = document.getElementById('adminId').value;
+            const adminPassword = document.getElementById('adminPassword').value;
+
+            if (!adminId || !adminPassword) {
+                alert('Please enter both Admin ID and Password');
+                return;
+            }
+
+            showLoading();
+
+            try {
+                const response = await fetch(`${baseUrl}/api/admin/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ adminId, adminPassword })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    adminToken = data.token;
+                    
+                    // Show token and dashboard
+                    document.getElementById('tokenValue').textContent = data.token;
+                    document.getElementById('expiryTime').textContent = new Date(data.expiresAt).toLocaleString();
+                    document.getElementById('tokenDisplay').classList.remove('hidden');
+                    document.getElementById('dashboard').classList.remove('hidden');
+                    
+                    displayResponse(data);
+                } else {
+                    displayResponse(data, 'error');
+                }
+            } catch (error) {
+                displayResponse({ error: error.message }, 'error');
+            }
+        }
+
+        async function adminLogout() {
+            if (!adminToken) return;
+
+            try {
+                const response = await fetch(`${baseUrl}/api/admin/logout`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${adminToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+                
+                adminToken = null;
+                document.getElementById('tokenDisplay').classList.add('hidden');
+                document.getElementById('dashboard').classList.add('hidden');
+                clearResponse();
+                displayResponse(data);
+
+            } catch (error) {
+                displayResponse({ error: error.message }, 'error');
+            }
+        }
+
+        // API Request Helper
+        async function makeRequest(endpoint, options = {}) {
+            if (!adminToken) {
+                alert('Please login first!');
+                return;
+            }
+
+            showLoading();
+
+            try {
+                const response = await fetch(`${baseUrl}${endpoint}`, {
+                    headers: {
+                        'Authorization': `Bearer ${adminToken}`,
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    },
+                    ...options
+                });
+
+                const data = await response.json();
+                displayResponse({ status: response.status, ...data }, response.ok ? 'success' : 'error');
+                return data;
+
+            } catch (error) {
+                displayResponse({ error: error.message }, 'error');
+            }
+        }
+
+        // User Management Functions
+        async function getAllUsers() {
+            await makeRequest('/api/admin/userdetails');
+        }
+
+        async function getUserById() {
+            const userId = document.getElementById('getUserId').value;
+            if (!userId) {
+                alert('Please enter User ID');
+                return;
+            }
+            await makeRequest(`/api/admin/userid?userId=${userId}`);
+        }
+
+        async function updateUser() {
+            const userId = document.getElementById('updateUserId').value;
+            const userName = document.getElementById('updateUserName').value;
+            const userEmail = document.getElementById('updateUserEmail').value;
+            const userPhone = document.getElementById('updateUserPhone').value;
+            const userAddress = document.getElementById('updateUserAddress').value;
+
+            if (!userId) {
+                alert('Please enter User ID');
+                return;
+            }
+
+            const updateData = {};
+            if (userName) updateData.userName = userName;
+            if (userEmail) updateData.userEmail = userEmail;
+            if (userPhone) updateData.userPhone = parseInt(userPhone);
+            if (userAddress) updateData.userAddress = userAddress;
+
+            if (Object.keys(updateData).length === 0) {
+                alert('Please fill at least one field to update');
+                return;
+            }
+
+            await makeRequest(`/api/admin/userid?userId=${userId}`, {
+                method: 'PUT',
+                body: JSON.stringify(updateData)
+            });
+        }
+
+        async function deleteUser() {
+            const userId = document.getElementById('deleteUserId').value;
+            if (!userId) {
+                alert('Please enter User ID');
+                return;
+            }
+
+            if (confirm(`Are you sure you want to delete user ${userId}?`)) {
+                await makeRequest(`/api/admin/userid?userId=${userId}`, {
+                    method: 'DELETE'
+                });
+            }
+        }
+
+        // Product Management Functions
+        async function updateProductStock() {
+            const productId = document.getElementById('productId').value;
+            const stock = document.getElementById('productStock').value;
+
+            if (!productId || stock === '') {
+                alert('Please enter both Product ID and Stock');
+                return;
+            }
+
+            await makeRequest(`/api/admin/products/stock?id=${productId}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ Stock: parseInt(stock) })
+            });
+        }
+
+        async function setStock(stockLevel) {
+            const productId = document.getElementById('quickProductId').value;
+            if (!productId) {
+                alert('Please enter Product ID');
+                return;
+            }
+
+            await makeRequest(`/api/admin/products/stock?id=${productId}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ Stock: stockLevel })
+            });
+        }
+
+        // Test Suite Functions
+        async function runAllTests() {
+            displayResponse({ message: '🚀 Starting comprehensive test suite...' });
+            
+            // Get all users first
+            const allUsers = await makeRequest('/api/admin/userdetails');
+            
+            if (allUsers && allUsers.users && allUsers.users.length > 0) {
+                const userId = allUsers.users[0].userId;
+                
+                // Test user operations
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                await makeRequest(`/api/admin/userid?userId=${userId}`);
+                
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                await makeRequest(`/api/admin/userid?userId=${userId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ userName: 'Test Suite User ' + Date.now() })
+                });
+            }
+            
+            // Test product operations
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            await makeRequest('/api/admin/products/stock?id=1', {
+                method: 'PATCH',
+                body: JSON.stringify({ Stock: 50 })
+            });
+            
+            displayResponse({ message: '✅ Test suite completed!' });
+        }
+
+        async function testErrorCases() {
+            displayResponse({ message: '🧪 Testing error cases...' });
+            
+            // Invalid user ID
+            await makeRequest('/api/admin/userid?userId=9999');
+            
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Invalid product ID
+            await makeRequest('/api/admin/products/stock?id=9999', {
+                method: 'PATCH',
+                body: JSON.stringify({ Stock: 10 })
+            });
+        }
+
+        async function testAllProducts() {
+            const productIds = [1, 2, 3];
+            const stocks = [25, 50, 75];
+            
+            for (let i = 0; i < productIds.length; i++) {
+                await makeRequest(`/api/admin/products/stock?id=${productIds[i]}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ Stock: stocks[i] })
+                });
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+        }
+
+        function populateWithSampleData() {
+            // Fill in sample data for testing
+            document.getElementById('getUserId').value = '1';
+            document.getElementById('updateUserId').value = '1';
+            document.getElementById('updateUserName').value = 'John Doe Updated';
+            document.getElementById('updateUserEmail').value = 'john.updated@example.com';
+            document.getElementById('updateUserPhone').value = '1234567890';
+            document.getElementById('updateUserAddress').value = '123 Sample Street';
+            document.getElementById('productId').value = '1';
+            document.getElementById('productStock').value = '50';
+            document.getElementById('quickProductId').value = '1';
+            
+            alert('Sample data filled! You can now test the functions.');
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            displayResponse({ message: '👋 Welcome to Admin Dashboard! Please login to start testing.' });
+        });
+    </script>
+</body>
+</html>
