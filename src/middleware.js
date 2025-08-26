@@ -52,7 +52,10 @@ export async function middleware(req) {
   await supabase.auth.getSession()
 
   const { pathname } = req.nextUrl
-
+  
+  if (pathname.match(/\.[a-zA-Z0-9]{1,6}$/)) {
+    return res
+  }
   // Protected routes that require authentication
   const protectedRoutes = ['/dashboard', '/profile', '/orders', '/admin']
   
