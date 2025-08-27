@@ -20,6 +20,13 @@ export default function Navbar() {
   const { user, signOut, loading } = useAuth();
   const router = useRouter();
 
+  // Debug: Log router and auth state
+  useEffect(() => {
+    console.log('🔍 NavBar Debug - Current route:', router.pathname);
+    console.log('🔍 NavBar Debug - User:', user ? 'logged in' : 'not logged in');
+    console.log('🔍 NavBar Debug - Loading:', loading);
+  }, [router.pathname, user, loading]);
+
   // Prevent hydration mismatch
   useEffect(() => {
     setMounted(true);
@@ -38,14 +45,14 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, [mounted]);
 
-  // Fetch cart count - FIXED: prevent infinite loop
+  // Fetch cart count
   const fetchCartCount = useCallback(async () => {
     if (!mounted) return;
     
     try {
       const response = await fetch("/api/cart", { 
         credentials: "include",
-        cache: 'no-cache'  // Prevent caching issues
+        cache: 'no-cache'
       });
       if (response.ok) {
         const data = await response.json();
@@ -53,20 +60,18 @@ export default function Navbar() {
       }
     } catch (error) {
       console.error("Failed to fetch cart count:", error);
-      setCartCount(0); // Reset on error
+      setCartCount(0);
     }
   }, [mounted]);
 
-  // FIXED: Only fetch cart on mount and when user changes (not on every render)
   useEffect(() => {
     if (!mounted) return;
     
     fetchCartCount();
     
-    // Optional: Set up periodic refresh (less frequent)
-    const interval = setInterval(fetchCartCount, 60000); // Every 1 minute instead of 30 seconds
+    const interval = setInterval(fetchCartCount, 60000);
     return () => clearInterval(interval);
-  }, [fetchCartCount, user?.id]); // Only depend on user ID, not entire user object
+  }, [fetchCartCount, user?.id]);
 
   const handleSignOut = async () => {
     try {
@@ -80,8 +85,48 @@ export default function Navbar() {
   };
 
   const handleNavClick = (href) => {
+    console.log('🔗 NavClick called for:', href);
     setIsOpen(false);
     router.push(href);
+  };
+
+  // FIXED: Enhanced debugging for auth navigation
+  const handleLoginClick = async (e) => {
+    console.log('🔗 Login button clicked!');
+    e.preventDefault();
+    e.stopPropagation();
+    setIsOpen(false);
+    setShowUserMenu(false);
+    
+    try {
+      console.log('🔗 About to navigate to /login');
+      console.log('🔗 Current pathname:', router.pathname);
+      console.log('🔗 Router ready:', router.isReady);
+      
+      await router.push('/login');
+      console.log('🔗 Navigation to /login completed');
+    } catch (error) {
+      console.error('🔗 Navigation error:', error);
+    }
+  };
+
+  const handleRegisterClick = async (e) => {
+    console.log('🔗 Register button clicked!');
+    e.preventDefault();
+    e.stopPropagation();
+    setIsOpen(false);
+    setShowUserMenu(false);
+    
+    try {
+      console.log('🔗 About to navigate to /register');
+      console.log('🔗 Current pathname:', router.pathname);
+      console.log('🔗 Router ready:', router.isReady);
+      
+      await router.push('/register');
+      console.log('🔗 Navigation to /register completed');
+    } catch (error) {
+      console.error('🔗 Navigation error:', error);
+    }
   };
 
   const navigationItems = [
@@ -199,15 +244,18 @@ export default function Navbar() {
                 </div>
               ) : (
                 <div className="flex items-center space-x-2">
+                  {/* DEBUG: Enhanced auth buttons */}
                   <button
-                    onClick={() => handleNavClick('/login')}
-                    className="px-4 py-2 text-sm bg-[#2F674A] text-white hover:bg-green-700 rounded transition-colors font-medium"
+                    onClick={handleLoginClick}
+                    className="px-4 py-2 text-sm bg-[#2F674A] text-white hover:bg-green-700 rounded transition-colors font-medium cursor-pointer"
+                    type="button"
                   >
                     Login
                   </button>
                   <button
-                    onClick={() => handleNavClick('/register')}
-                    className="hidden sm:block px-4 py-2 text-sm bg-black text-white hover:bg-gray-800 rounded transition-colors font-medium"
+                    onClick={handleRegisterClick}
+                    className="hidden sm:block px-4 py-2 text-sm bg-black text-white hover:bg-gray-800 rounded transition-colors font-medium cursor-pointer"
+                    type="button"
                   >
                     Sign Up
                   </button>
@@ -218,6 +266,7 @@ export default function Navbar() {
               <button
                 onClick={() => setIsOpen(!isOpen)}
                 className="lg:hidden p-2 text-gray-700 hover:text-[#2F674A] transition-colors z-50 relative"
+                type="button"
               >
                 {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
               </button>
@@ -239,6 +288,7 @@ export default function Navbar() {
                         ? "text-[#2F674A] bg-green-50"
                         : "text-gray-700 hover:text-[#2F674A] hover:bg-gray-50"
                     }`}
+                    type="button"
                   >
                     {item.name}
                   </button>
@@ -255,18 +305,21 @@ export default function Navbar() {
                     <button
                       onClick={() => handleNavClick('/profile')}
                       className="block w-full text-left px-3 py-2 text-base text-gray-700 hover:text-[#2F674A] hover:bg-gray-50 transition-colors"
+                      type="button"
                     >
                       My Profile
                     </button>
                     <button
                       onClick={() => handleNavClick('/orders')}
                       className="block w-full text-left px-3 py-2 text-base text-gray-700 hover:text-[#2F674A] hover:bg-gray-50 transition-colors"
+                      type="button"
                     >
                       My Orders
                     </button>
                     <button
                       onClick={handleSignOut}
                       className="block w-full text-left px-3 py-2 text-base text-red-600 hover:bg-red-50 transition-colors"
+                      type="button"
                     >
                       Sign Out
                     </button>
@@ -274,14 +327,16 @@ export default function Navbar() {
                 ) : (
                   <div className="border-t mt-4 pt-4 space-y-2">
                     <button
-                      onClick={() => handleNavClick('/login')}
-                      className="block w-full text-center px-3 py-2 text-sm bg-[#2F674A] text-white hover:bg-green-700 rounded transition-colors font-medium"
+                      onClick={handleLoginClick}
+                      className="block w-full text-center px-3 py-2 text-sm bg-[#2F674A] text-white hover:bg-green-700 rounded transition-colors font-medium cursor-pointer"
+                      type="button"
                     >
                       Login
                     </button>
                     <button
-                      onClick={() => handleNavClick('/register')}
-                      className="block w-full text-center px-3 py-2 text-sm bg-black text-white hover:bg-gray-800 rounded transition-colors font-medium"
+                      onClick={handleRegisterClick}
+                      className="block w-full text-center px-3 py-2 text-sm bg-black text-white hover:bg-gray-800 rounded transition-colors font-medium cursor-pointer"
+                      type="button"
                     >
                       Sign Up
                     </button>

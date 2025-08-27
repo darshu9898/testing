@@ -1,7 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import { getOrSetSessionId } from './lib/session'
-import { randomBytes } from 'crypto' 
 
 export async function middleware(req) {
   const res = NextResponse.next()
@@ -48,17 +47,40 @@ export async function middleware(req) {
     }
   )
 
-  // Refresh session if expired - this is crucial for SSR
-  await supabase.auth.getSession()
-
   const { pathname } = req.nextUrl
   
+  // Skip middleware for static files
   if (pathname.match(/\.[a-zA-Z0-9]{1,6}$/)) {
     return res
   }
+  
+  // Skip auth for admin orders page
   if (pathname === '/admin/orders.html') {
-  return res; // skip auth for this page
-}
+    return res
+  }
+
+  // FIXED: More robust session checking with error handling
+  let session = null
+  try {
+    // Refresh session if expired - this is crucial for SSR
+    const { data: { session: currentSession }, error } = await supabase.auth.getSession()
+    
+    if (error) {
+      console.warn('Middleware session error:', error.message)
+      // Clear potentially corrupted session cookies
+      const cookieNames = ['sb-access-token', 'sb-refresh-token', 'supabase-auth-token']
+      cookieNames.forEach(name => {
+        res.cookies.delete(name)
+      })
+    } else {
+      session = currentSession
+    }
+  } catch (err) {
+    console.error('Middleware session fetch error:', err)
+    // Clear session on error
+    session = null
+  }
+
   // Protected routes that require authentication
   const protectedRoutes = ['/dashboard', '/profile', '/orders']
   
@@ -67,22 +89,42 @@ export async function middleware(req) {
 
   // Check if accessing protected route
   if (protectedRoutes.some(route => pathname.startsWith(route))) {
-    const { data: { session } } = await supabase.auth.getSession()
-    
     if (!session) {
+      console.log('🔒 Middleware: Redirecting to login for protected route:', pathname)
       const redirectUrl = new URL('/login', req.url)
       redirectUrl.searchParams.set('redirect', pathname)
       return NextResponse.redirect(redirectUrl)
     }
   }
 
-  // Redirect authenticated users away from auth pages
+  // FIXED: More careful handling of auth route redirects
   if (authRoutes.some(route => pathname.startsWith(route))) {
-    const { data: { session } } = await supabase.auth.getSession()
-    
     if (session) {
-      const redirectTo = req.nextUrl.searchParams.get('redirect') || '/'
-      return NextResponse.redirect(new URL(redirectTo, req.url))
+      // Double-check that the session is actually valid
+      try {
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
+        
+        if (userError || !user) {
+          console.log('🔒 Middleware: Invalid session found, clearing and allowing auth route access')
+          // Clear invalid session
+          const cookieNames = ['sb-access-token', 'sb-refresh-token']
+          cookieNames.forEach(name => {
+            res.cookies.delete(name)
+          })
+          return res // Allow access to auth routes
+        }
+        
+        // Valid session exists, redirect away from auth routes
+        console.log('🔒 Middleware: Valid session found, redirecting away from auth route:', pathname)
+        const redirectTo = req.nextUrl.searchParams.get('redirect') || '/'
+        return NextResponse.redirect(new URL(redirectTo, req.url))
+      } catch (userFetchError) {
+        console.error('🔒 Middleware: User fetch error:', userFetchError)
+        // On error, allow access to auth routes
+        return res
+      }
+    } else {
+      console.log('🔒 Middleware: No session, allowing access to auth route:', pathname)
     }
   }
 
@@ -112,51 +154,3 @@ export const config = {
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
-
-// ===== ALTERNATIVE: Simple middleware without Supabase (if you prefer) =====
-// If you want to avoid Supabase in middleware entirely, use this simpler version:
-
-/*
-import { NextResponse } from 'next/server'
-
-export async function middleware(req) {
-  const res = NextResponse.next()
-  const { pathname } = req.nextUrl
-
-  // Add security headers
-  res.headers.set('X-Frame-Options', 'DENY')
-  res.headers.set('X-Content-Type-Options', 'nosniff')
-  res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
-  res.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
-  
-  if (process.env.NODE_ENV === 'production') {
-    res.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
-  }
-
-  // Simple auth check based on cookies
-  const authCookies = req.cookies.get('sb-access-token') || req.cookies.get('supabase-auth-token')
-  const protectedRoutes = ['/dashboard', '/profile', '/orders', '/admin']
-  const authRoutes = ['/login', '/register']
-
-  // Redirect to login if accessing protected route without auth cookie
-  if (protectedRoutes.some(route => pathname.startsWith(route)) && !authCookies) {
-    const redirectUrl = new URL('/login', req.url)
-    redirectUrl.searchParams.set('redirect', pathname)
-    return NextResponse.redirect(redirectUrl)
-  }
-
-  // Redirect away from auth pages if already has auth cookie
-  if (authRoutes.some(route => pathname.startsWith(route)) && authCookies) {
-    const redirectTo = req.nextUrl.searchParams.get('redirect') || '/'
-    return NextResponse.redirect(new URL(redirectTo, req.url))
-  }
-
-  return res
-}
-
-export const config = {
-  matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
-  ],
-}
-*/
