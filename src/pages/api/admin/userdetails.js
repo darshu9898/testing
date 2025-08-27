@@ -3,6 +3,10 @@
 import prisma from '@/lib/prisma'
 import { requireAdminAuth } from '@/lib/adminAuth'
 
+function replacer(key, value) {
+  return typeof value === 'bigint' ? value.toString() : value
+}
+
 export default async function handler(req, res) {
   console.log(`📥 Admin userdetails request: ${req.method} ${req.url}`)
   
@@ -71,12 +75,14 @@ export default async function handler(req, res) {
 
     console.log('✅ Users data processed successfully')
 
-    return res.status(200).json({
-      success: true,
-      totalUsers: users.length,
-      users: userSummary
-    })
-
+return res
+  .status(200)
+  .setHeader('Content-Type', 'application/json')
+  .send(JSON.stringify({
+    success: true,
+    totalUsers: users.length,
+    users: userSummary
+  }, replacer))
   } catch (error) {
     console.error('💥 Admin userdetails error:', error)
     return res.status(500).json({ error: 'Internal server error' })

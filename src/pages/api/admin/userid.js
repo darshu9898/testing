@@ -2,6 +2,11 @@
 import prisma from '@/lib/prisma'
 import { requireAdminAuth } from '@/lib/adminAuth'
 
+function replacer(key, value) {
+  return typeof value === 'bigint' ? value.toString() : value
+}
+
+
 export default async function handler(req, res) {
   try {
     const { userId } = req.query
@@ -123,7 +128,7 @@ export default async function handler(req, res) {
       const updateData = {}
       if (userName) updateData.userName = userName.trim()
       if (userEmail) updateData.userEmail = userEmail.trim().toLowerCase()
-      if (userPhone !== undefined) updateData.userPhone = userPhone ? parseInt(userPhone) : null
+      if (userPhone !== undefined) updateData.userPhone = userPhone ? BigInt(userPhone) : null
       if (userAddress !== undefined) updateData.userAddress = userAddress ? userAddress.trim() : null
 
       try {
@@ -144,11 +149,12 @@ export default async function handler(req, res) {
           }
         })
 
-        return res.status(200).json({
+          res.setHeader("Content-Type", "application/json")
+        return res.status(200).send(JSON.stringify({
           success: true,
           message: 'User updated successfully',
           user: updatedUser
-        })
+        }, replacer))
 
       } catch (dbError) {
         // Handle unique constraint violations
