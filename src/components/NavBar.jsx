@@ -16,25 +16,40 @@ export default function Navbar() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [cartCount, setCartCount] = useState(0);
   const [mounted, setMounted] = useState(false);
+  const [navbarReady, setNavbarReady] = useState(false);
 
   const { user, signOut, loading } = useAuth();
   const router = useRouter();
 
-  // Debug: Log router and auth state
+  // Debug: Enhanced logging for navbar state
   useEffect(() => {
-    console.log('🔍 NavBar Debug - Current route:', router.pathname);
-    console.log('🔍 NavBar Debug - User:', user ? 'logged in' : 'not logged in');
-    console.log('🔍 NavBar Debug - Loading:', loading);
-  }, [router.pathname, user, loading]);
+    console.log('🔍 NavBar: State update -', {
+      pathname: router.pathname,
+      user: user ? user.email : 'not logged in',
+      loading,
+      mounted,
+      navbarReady,
+      timestamp: new Date().toISOString()
+    });
+  }, [router.pathname, user, loading, mounted, navbarReady]);
 
-  // Prevent hydration mismatch
+  // Handle mounting and prevent hydration mismatch
   useEffect(() => {
+    console.log('🔄 NavBar: Component mounting...');
     setMounted(true);
   }, []);
 
+  // Set navbar as ready only after auth is initialized
+  useEffect(() => {
+    if (mounted && !loading) {
+      console.log('✅ NavBar: Auth initialized, navbar ready');
+      setNavbarReady(true);
+    }
+  }, [mounted, loading]);
+
   // Handle scroll effect (safe on client only)
   useEffect(() => {
-    if (!mounted) return;
+    if (!navbarReady) return;
     
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 10);
@@ -43,89 +58,90 @@ export default function Navbar() {
     handleScroll();
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
-  }, [mounted]);
+  }, [navbarReady]);
 
   // Fetch cart count
   const fetchCartCount = useCallback(async () => {
-    if (!mounted) return;
+    if (!navbarReady) return;
     
     try {
+      console.log('🛒 NavBar: Fetching cart count...');
       const response = await fetch("/api/cart", { 
         credentials: "include",
         cache: 'no-cache'
       });
       if (response.ok) {
         const data = await response.json();
-        setCartCount(data.items?.length || 0);
+        const count = data.items?.length || 0;
+        console.log('🛒 NavBar: Cart count fetched:', count);
+        setCartCount(count);
+      } else {
+        console.warn('⚠️ NavBar: Cart fetch failed:', response.status);
+        setCartCount(0);
       }
     } catch (error) {
-      console.error("Failed to fetch cart count:", error);
+      console.error("❌ NavBar: Failed to fetch cart count:", error);
       setCartCount(0);
     }
-  }, [mounted]);
+  }, [navbarReady]);
 
   useEffect(() => {
-    if (!mounted) return;
+    if (!navbarReady) return;
     
+    console.log('🛒 NavBar: Setting up cart fetch for user:', user?.email || 'guest');
     fetchCartCount();
     
     const interval = setInterval(fetchCartCount, 60000);
     return () => clearInterval(interval);
-  }, [fetchCartCount, user?.id]);
+  }, [fetchCartCount, user?.id, navbarReady]);
 
   const handleSignOut = async () => {
     try {
+      console.log('🚪 NavBar: User signing out...');
       await signOut();
       setShowUserMenu(false);
       setCartCount(0);
       router.push('/login');
     } catch (error) {
-      console.error("Sign out error:", error);
+      console.error("❌ NavBar: Sign out error:", error);
     }
   };
 
   const handleNavClick = (href) => {
-    console.log('🔗 NavClick called for:', href);
+    console.log('🔗 NavBar: Navigation click to:', href);
     setIsOpen(false);
     router.push(href);
   };
 
-  // FIXED: Enhanced debugging for auth navigation
   const handleLoginClick = async (e) => {
-    console.log('🔗 Login button clicked!');
+    console.log('🔗 NavBar: Login button clicked!');
     e.preventDefault();
     e.stopPropagation();
     setIsOpen(false);
     setShowUserMenu(false);
     
     try {
-      console.log('🔗 About to navigate to /login');
-      console.log('🔗 Current pathname:', router.pathname);
-      console.log('🔗 Router ready:', router.isReady);
-      
+      console.log('🔗 NavBar: Navigating to /login from:', router.pathname);
       await router.push('/login');
-      console.log('🔗 Navigation to /login completed');
+      console.log('✅ NavBar: Navigation to /login completed');
     } catch (error) {
-      console.error('🔗 Navigation error:', error);
+      console.error('❌ NavBar: Navigation error:', error);
     }
   };
 
   const handleRegisterClick = async (e) => {
-    console.log('🔗 Register button clicked!');
+    console.log('🔗 NavBar: Register button clicked!');
     e.preventDefault();
     e.stopPropagation();
     setIsOpen(false);
     setShowUserMenu(false);
     
     try {
-      console.log('🔗 About to navigate to /register');
-      console.log('🔗 Current pathname:', router.pathname);
-      console.log('🔗 Router ready:', router.isReady);
-      
+      console.log('🔗 NavBar: Navigating to /register from:', router.pathname);
       await router.push('/register');
-      console.log('🔗 Navigation to /register completed');
+      console.log('✅ NavBar: Navigation to /register completed');
     } catch (error) {
-      console.error('🔗 Navigation error:', error);
+      console.error('❌ NavBar: Navigation error:', error);
     }
   };
 
@@ -136,10 +152,34 @@ export default function Navbar() {
     { name: "FAQ", href: "/faq" },
   ];
 
-  // Don't render until mounted to prevent hydration mismatch
-  if (!mounted) {
-    return <div className="h-16" />;
+  // Show loading state until navbar is ready
+  if (!navbarReady) {
+    console.log('⏳ NavBar: Not ready yet, showing loading state');
+    return (
+      <nav className="fixed top-0 left-0 right-0 z-50 h-16 bg-white shadow-lg">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between">
+          {/* Logo */}
+          <div className="flex items-center">
+            <div className="bg-gradient-to-r from-[#2F674A] to-[#1F5132] p-2 rounded-lg">
+              <span className="text-white font-bold text-xl">T</span>
+            </div>
+            <div className="ml-2">
+              <span className="text-2xl font-bold text-[#2F674A]">Trivedam</span>
+              <div className="text-xs text-gray-500 -mt-1">Ayurvedic Wellness</div>
+            </div>
+          </div>
+          
+          {/* Loading state for auth buttons */}
+          <div className="flex items-center space-x-4">
+            <div className="animate-pulse bg-gray-200 h-8 w-20 rounded-full"></div>
+            <div className="animate-pulse bg-gray-200 h-8 w-20 rounded-full"></div>
+          </div>
+        </div>
+      </nav>
+    );
   }
+
+  console.log('✅ NavBar: Rendering full navbar with user:', user ? user.email : 'guest');
 
   return (
     <>
@@ -244,7 +284,6 @@ export default function Navbar() {
                 </div>
               ) : (
                 <div className="flex items-center space-x-2">
-                  {/* DEBUG: Enhanced auth buttons */}
                   <button
                     onClick={handleLoginClick}
                     className="px-4 py-2 text-sm bg-[#2F674A] text-white hover:bg-green-700 rounded transition-colors font-medium cursor-pointer"
