@@ -106,7 +106,9 @@ export const AuthProvider = ({ children }) => {
       console.log('📡 AuthProvider: Login API response:', response.status, result)
       
       if (!response.ok) {
-        throw new Error(result.error)
+        console.log('❌ AuthProvider: Login failed:', result.error)
+        setLoading(false)
+        return { success: false, error: result.error || 'Login failed' }
       }
 
       // Wait longer for cookies to be set
@@ -129,7 +131,8 @@ export const AuthProvider = ({ children }) => {
         if (session) {
           console.log('✅ AuthProvider: Session refresh successful on attempt:', sessionRefreshAttempts + 1)
           setUser(session.user)
-          break
+          setLoading(false)
+          return { success: true, user: session.user }
         } else if (error) {
           console.error('❌ AuthProvider: Session refresh error:', error)
         } else {
@@ -153,22 +156,28 @@ export const AuthProvider = ({ children }) => {
           
           if (manualError) {
             console.error('❌ AuthProvider: Manual session setup failed:', manualError)
+            setLoading(false)
+            return { success: false, error: 'Session setup failed' }
           } else if (manualSession.session) {
             console.log('✅ AuthProvider: Manual session setup successful:', manualSession.user.email)
             setUser(manualSession.user)
+            setLoading(false)
+            return { success: true, user: manualSession.user }
           }
         } catch (manualErr) {
           console.error('💥 AuthProvider: Manual session setup error:', manualErr)
+          setLoading(false)
+          return { success: false, error: 'Authentication failed' }
         }
       }
       
-      return result
+      setLoading(false)
+      return { success: false, error: 'Session creation failed' }
+      
     } catch (error) {
       console.error('💥 AuthProvider: Sign in error:', error)
       setLoading(false)
-      throw error
-    } finally {
-      setLoading(false)
+      return { success: false, error: error.message || 'Network error occurred' }
     }
   }
 

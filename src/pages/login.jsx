@@ -49,11 +49,22 @@ export default function Login() {
     setError('');
 
     try {
-      await signIn(email, password);
-      const redirectTo = redirect && typeof redirect === 'string' ? redirect : '/';
-      router.push(redirectTo);
+      console.log('🔐 Login: Attempting login for:', email);
+      
+      const result = await signIn(email, password);
+      
+      if (result.success) {
+        console.log('✅ Login: Login successful');
+        const redirectTo = redirect && typeof redirect === 'string' ? redirect : '/';
+        router.push(redirectTo);
+      } else {
+        console.log('❌ Login: Login failed:', result.error);
+        setError(result.error || 'Login failed');
+        setLoading(false);
+      }
     } catch (error) {
-      setError(error.message);
+      console.error('💥 Login: Unexpected error:', error);
+      setError('An unexpected error occurred. Please try again.');
       setLoading(false);
     }
   };
