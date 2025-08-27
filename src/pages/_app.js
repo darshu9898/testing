@@ -27,7 +27,7 @@ export default function App({ Component, pageProps }) {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -20 }}
-          transition={{ duration: 0.2 }}
+          transition={{ duration: 0.15 }}
           className="min-h-screen bg-white"
         >
           <Component {...pageProps} />
