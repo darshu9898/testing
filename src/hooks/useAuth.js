@@ -7,32 +7,46 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [mounted, setMounted] = useState(false)
+  const [initialized, setInitialized] = useState(false)
   const supabase = createSupabaseBrowserClient()
 
   useEffect(() => {
+    console.log('🔄 AuthProvider: Component mounting...')
     setMounted(true)
     
     // Get initial session
     const getInitialSession = async () => {
       try {
-        console.log('🔍 Getting initial session...')
+        console.log('🔍 AuthProvider: Getting initial session...')
+        console.log('🍪 AuthProvider: Document cookies:', document.cookie.split(';').filter(c => c.includes('sb-') || c.includes('supabase')))
+        
         const { data: { session }, error } = await supabase.auth.getSession()
         
+        console.log('📡 AuthProvider: Initial session response:', { 
+          hasSession: !!session, 
+          hasUser: !!session?.user,
+          userEmail: session?.user?.email,
+          error: error?.message 
+        })
+        
         if (error) {
-          console.error('❌ Initial session error:', error)
+          console.error('❌ AuthProvider: Initial session error:', error)
           setUser(null)
         } else if (session) {
-          console.log('✅ Initial session found:', session.user.email)
+          console.log('✅ AuthProvider: Initial session found for:', session.user.email)
+          console.log('🕒 AuthProvider: Session expires at:', new Date(session.expires_at * 1000))
           setUser(session.user)
         } else {
-          console.log('ℹ️ No initial session found')
+          console.log('ℹ️ AuthProvider: No initial session found')
           setUser(null)
         }
       } catch (err) {
-        console.error('💥 Session fetch error:', err)
+        console.error('💥 AuthProvider: Session fetch error:', err)
         setUser(null)
       } finally {
+        console.log('🏁 AuthProvider: Initial session check complete, setting loading to false')
         setLoading(false)
+        setInitialized(true)
       }
     }
 
@@ -41,38 +55,44 @@ export const AuthProvider = ({ children }) => {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('🔄 Auth state change:', event, session?.user?.email || 'no user')
+        console.log('🔄 AuthProvider: Auth state change detected:', event, {
+          hasSession: !!session,
+          userEmail: session?.user?.email || 'no user',
+          timestamp: new Date().toISOString()
+        })
+        
         setUser(session?.user || null)
         setLoading(false)
         
         // Merge guest cart when user signs in (non-blocking)
         if (event === 'SIGNED_IN' && session?.user) {
-          console.log('🛒 Attempting cart merge...')
+          console.log('🛒 AuthProvider: User signed in, attempting cart merge...')
           try {
             const response = await fetch('/api/cart/merge', {
               method: 'POST',
               credentials: 'include'
             })
             if (response.ok) {
-              console.log('✅ Cart merge successful')
+              console.log('✅ AuthProvider: Cart merge successful')
             } else {
-              console.warn('⚠️ Cart merge failed with status:', response.status)
+              console.warn('⚠️ AuthProvider: Cart merge failed with status:', response.status)
             }
           } catch (error) {
-            console.warn('⚠️ Cart merge failed:', error.message)
+            console.warn('⚠️ AuthProvider: Cart merge failed:', error.message)
           }
         }
       }
     )
 
     return () => {
+      console.log('🧹 AuthProvider: Cleaning up auth subscription')
       subscription?.unsubscribe()
     }
   }, [supabase])
 
   const signIn = async (email, password) => {
     try {
-      console.log('🚀 Starting sign in for:', email)
+      console.log('🚀 AuthProvider: Starting sign in for:', email)
       setLoading(true)
       
       const response = await fetch('/api/auth/login', {
@@ -83,58 +103,68 @@ export const AuthProvider = ({ children }) => {
       })
       
       const result = await response.json()
-      console.log('📡 Login API response:', response.status, result)
+      console.log('📡 AuthProvider: Login API response:', response.status, result)
       
       if (!response.ok) {
         throw new Error(result.error)
       }
 
-      // If API login successful, the cookies should now be set
-      // Let's wait a moment and then refresh the session
-      console.log('⏳ Waiting for cookies to be set...')
-      await new Promise(resolve => setTimeout(resolve, 500))
+      // Wait longer for cookies to be set
+      console.log('⏳ AuthProvider: Waiting for auth cookies to be set...')
+      await new Promise(resolve => setTimeout(resolve, 1000))
 
-      // Check cookies again
+      // Check cookies after login
       const cookies = document.cookie.split(';').filter(c => c.includes('supabase') || c.includes('sb-'))
-      console.log('🍪 Cookies after login:', cookies.length, 'found')
+      console.log('🍪 AuthProvider: Cookies after login:', cookies.length, 'found:', cookies.map(c => c.split('=')[0].trim()))
 
-      // Force refresh the session
-      console.log('🔄 Refreshing session after login...')
-      const { data: { session }, error } = await supabase.auth.getSession()
+      // Force refresh the session multiple times if needed
+      let sessionRefreshAttempts = 0
+      const maxAttempts = 3
       
-      if (error) {
-        console.error('❌ Session refresh error:', error)
+      while (sessionRefreshAttempts < maxAttempts) {
+        console.log(`🔄 AuthProvider: Session refresh attempt ${sessionRefreshAttempts + 1}/${maxAttempts}`)
+        
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (session) {
+          console.log('✅ AuthProvider: Session refresh successful on attempt:', sessionRefreshAttempts + 1)
+          setUser(session.user)
+          break
+        } else if (error) {
+          console.error('❌ AuthProvider: Session refresh error:', error)
+        } else {
+          console.warn('⚠️ AuthProvider: No session found on attempt:', sessionRefreshAttempts + 1)
+        }
+        
+        sessionRefreshAttempts++
+        if (sessionRefreshAttempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 500))
+        }
       }
       
-      if (session) {
-        console.log('✅ Session refreshed successfully:', session.user.email)
-        setUser(session.user)
-      } else {
-        console.warn('⚠️ No session found after login')
-        // Try manual session setup with the returned tokens
-        if (result.session) {
-          console.log('🔧 Attempting manual session setup...')
-          try {
-            const { data: manualSession, error: manualError } = await supabase.auth.setSession({
-              access_token: result.session.access_token,
-              refresh_token: result.session.refresh_token
-            })
-            
-            if (manualError) {
-              console.error('❌ Manual session setup failed:', manualError)
-            } else if (manualSession.session) {
-              console.log('✅ Manual session setup successful:', manualSession.user.email)
-              setUser(manualSession.user)
-            }
-          } catch (manualErr) {
-            console.error('💥 Manual session setup error:', manualErr)
+      // If session refresh failed, try manual session setup
+      if (sessionRefreshAttempts === maxAttempts && result.session) {
+        console.log('🔧 AuthProvider: Attempting manual session setup...')
+        try {
+          const { data: manualSession, error: manualError } = await supabase.auth.setSession({
+            access_token: result.session.access_token,
+            refresh_token: result.session.refresh_token
+          })
+          
+          if (manualError) {
+            console.error('❌ AuthProvider: Manual session setup failed:', manualError)
+          } else if (manualSession.session) {
+            console.log('✅ AuthProvider: Manual session setup successful:', manualSession.user.email)
+            setUser(manualSession.user)
           }
+        } catch (manualErr) {
+          console.error('💥 AuthProvider: Manual session setup error:', manualErr)
         }
       }
       
       return result
     } catch (error) {
-      console.error('💥 Sign in error:', error)
+      console.error('💥 AuthProvider: Sign in error:', error)
       setLoading(false)
       throw error
     } finally {
@@ -144,7 +174,7 @@ export const AuthProvider = ({ children }) => {
 
   const signUp = async (email, password, fullName) => {
     try {
-      console.log('🚀 Starting sign up for:', email)
+      console.log('🚀 AuthProvider: Starting sign up for:', email)
       
       const response = await fetch('/api/auth/register', {
         method: 'POST',
@@ -154,19 +184,19 @@ export const AuthProvider = ({ children }) => {
       })
       
       const result = await response.json()
-      console.log('📡 Register API response:', response.status, result)
+      console.log('📡 AuthProvider: Register API response:', response.status, result)
       
       if (!response.ok) throw new Error(result.error)
       return result
     } catch (error) {
-      console.error('💥 Sign up error:', error)
+      console.error('💥 AuthProvider: Sign up error:', error)
       throw error
     }
   }
 
   const signInWithGoogle = async () => {
     try {
-      console.log('🚀 Starting Google sign in...')
+      console.log('🚀 AuthProvider: Starting Google sign in...')
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -175,14 +205,14 @@ export const AuthProvider = ({ children }) => {
       })
       if (error) throw error
     } catch (error) {
-      console.error('💥 Google sign in error:', error)
+      console.error('💥 AuthProvider: Google sign in error:', error)
       throw error
     }
   }
 
   const signOut = async () => {
     try {
-      console.log('🚀 Starting sign out...')
+      console.log('🚀 AuthProvider: Starting sign out...')
       
       // Call our logout API first
       const response = await fetch('/api/auth/logout', {
@@ -192,7 +222,7 @@ export const AuthProvider = ({ children }) => {
       
       if (!response.ok) {
         const result = await response.json()
-        console.error('❌ Logout API failed:', result.error)
+        console.error('❌ AuthProvider: Logout API failed:', result.error)
         throw new Error(result.error)
       }
       
@@ -201,23 +231,33 @@ export const AuthProvider = ({ children }) => {
       
       // Force state update
       setUser(null)
-      console.log('✅ Sign out successful')
+      console.log('✅ AuthProvider: Sign out successful')
     } catch (error) {
-      console.error('💥 Sign out error:', error)
+      console.error('💥 AuthProvider: Sign out error:', error)
       throw error
     }
   }
 
-  // Debug current state
+  // Debug current state changes
   useEffect(() => {
     if (mounted) {
-      console.log('🔍 Current auth state - User:', user?.email || 'none', 'Loading:', loading)
+      console.log('🔍 AuthProvider: State update -', {
+        user: user?.email || 'none',
+        loading,
+        mounted,
+        timestamp: new Date().toISOString()
+      })
     }
   }, [user, loading, mounted])
 
-  // Prevent hydration issues by not rendering until mounted
-  if (!mounted) {
-    return null
+  // Prevent hydration issues - wait for both mounting and initialization
+  if (!mounted || !initialized) {
+    console.log('⏳ AuthProvider: Not ready yet - mounted:', mounted, 'initialized:', initialized)
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#2F674A]"></div>
+      </div>
+    )
   }
 
   return (
