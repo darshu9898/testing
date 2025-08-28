@@ -28,7 +28,8 @@ export default async function handler(req, res) {
             select: {
               orders: true,
               reviews: true,
-              cart: true
+              cart: true,
+              addresses: true // Add addresses count
             }
           }
         }
@@ -45,6 +46,8 @@ export default async function handler(req, res) {
         _count: { orderId: true }
       })
 
+      console.log(orderStats._count);
+
       // Get recent orders
       const recentOrders = await prisma.orders.findMany({
         where: { userId: parseInt(userId) },
@@ -58,13 +61,16 @@ export default async function handler(req, res) {
         take: 3
       })
 
+      console.log(orderStats._count.orderId);
+      
       const profileData = {
         ...userProfile,
         statistics: {
-          totalOrders: orderStats._count || 0,
+          totalOrders: orderStats._count.orderId || 0,
           totalSpent: orderStats._sum.orderAmount || 0,
           totalReviews: userProfile._count.reviews,
-          activeCartItems: userProfile._count.cart
+          activeCartItems: userProfile._count.cart,
+          totalAddresses: userProfile._count.addresses || 0 // Add addresses count
         },
         recentOrders: recentOrders.map(order => ({
           orderId: order.orderId,
@@ -180,6 +186,9 @@ export default async function handler(req, res) {
       try {
         // Delete user account and related data
         await prisma.$transaction(async (tx) => {
+          // Delete addresses (will cascade automatically with the schema setup)
+          await tx.userAddresses.deleteMany({ where: { userId: parseInt(userId) } })
+          
           // Delete cart items
           await tx.cart.deleteMany({ where: { userId: parseInt(userId) } })
           

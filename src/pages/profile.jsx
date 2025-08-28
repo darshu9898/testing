@@ -9,10 +9,27 @@ export default function Profile() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const [profile, setProfile] = useState(null);
+  const [addresses, setAddresses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  
+  // Address management states
+  const [showAddressModal, setShowAddressModal] = useState(false);
+  const [editingAddressId, setEditingAddressId] = useState(null);
+  const [addressFormData, setAddressFormData] = useState({
+    addressLabel: '',
+    addressLine1: '',
+    addressLine2: '',
+    city: '',
+    state: '',
+    postalCode: '',
+    country: 'India',
+    phoneNumber: '',
+    isDefault: false
+  });
+  const [addressSaving, setAddressSaving] = useState(false);
   
   // Form states
   const [formData, setFormData] = useState({
@@ -33,7 +50,7 @@ export default function Profile() {
       
       if (response.ok) {
         const data = await response.json();
-        console.log('Profile data received:', data); // Debug log
+        console.log('Profile data received:', data);
         
         if (data.profile) {
           setProfile(data.profile);
@@ -56,12 +73,31 @@ export default function Profile() {
     }
   };
 
+  // Fetch addresses
+  const fetchAddresses = async () => {
+    try {
+      const response = await fetch('/api/user/addresses', {
+        credentials: 'include'
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setAddresses(data.addresses || []);
+      } else {
+        console.error('Failed to fetch addresses');
+      }
+    } catch (error) {
+      console.error('Address fetch error:', error);
+    }
+  };
+
   useEffect(() => {
     if (!authLoading) {
       if (!user) {
         router.push('/login');
       } else {
         fetchProfile();
+        fetchAddresses();
       }
     }
   }, [user, authLoading, router]);
@@ -72,6 +108,15 @@ export default function Profile() {
     setFormData(prev => ({
       ...prev,
       [name]: value
+    }));
+  };
+
+  // Handle address form changes
+  const handleAddressInputChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setAddressFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
     }));
   };
 
@@ -115,6 +160,140 @@ export default function Profile() {
       });
     }
     setEditing(false);
+  };
+
+  // Open address modal
+  const openAddressModal = (address = null) => {
+    if (address) {
+      setEditingAddressId(address.addressId);
+      setAddressFormData({
+        addressLabel: address.addressLabel || '',
+        addressLine1: address.addressLine1 || '',
+        addressLine2: address.addressLine2 || '',
+        city: address.city || '',
+        state: address.state || '',
+        postalCode: address.postalCode || '',
+        country: address.country || 'India',
+        phoneNumber: address.phoneNumber || '',
+        isDefault: address.isDefault || false
+      });
+    } else {
+      setEditingAddressId(null);
+      setAddressFormData({
+        addressLabel: '',
+        addressLine1: '',
+        addressLine2: '',
+        city: '',
+        state: '',
+        postalCode: '',
+        country: 'India',
+        phoneNumber: '',
+        isDefault: addresses.length === 0 // Make default if first address
+      });
+    }
+    setShowAddressModal(true);
+  };
+
+  // Close address modal
+  const closeAddressModal = () => {
+    setShowAddressModal(false);
+    setEditingAddressId(null);
+    setAddressFormData({
+      addressLabel: '',
+      addressLine1: '',
+      addressLine2: '',
+      city: '',
+      state: '',
+      postalCode: '',
+      country: 'India',
+      phoneNumber: '',
+      isDefault: false
+    });
+  };
+
+  // Save address
+  const saveAddress = async () => {
+    setAddressSaving(true);
+    try {
+      const url = editingAddressId 
+        ? `/api/user/addresses/${editingAddressId}` 
+        : '/api/user/addresses';
+      
+      const method = editingAddressId ? 'PUT' : 'POST';
+      
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify(addressFormData)
+      });
+
+      if (response.ok) {
+        await fetchAddresses();
+        closeAddressModal();
+        alert(`Address ${editingAddressId ? 'updated' : 'added'} successfully!`);
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Failed to save address');
+      }
+    } catch (error) {
+      console.error('Save address error:', error);
+      alert('Failed to save address');
+    } finally {
+      setAddressSaving(false);
+    }
+  };
+
+  // Delete address
+  const deleteAddress = async (addressId) => {
+    if (!confirm('Are you sure you want to delete this address?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/user/addresses/${addressId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        await fetchAddresses();
+        alert('Address deleted successfully!');
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Failed to delete address');
+      }
+    } catch (error) {
+      console.error('Delete address error:', error);
+      alert('Failed to delete address');
+    }
+  };
+
+  // Set default address
+  const setDefaultAddress = async (addressId) => {
+    try {
+      const response = await fetch(`/api/user/addresses/${addressId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({ action: 'set_default' })
+      });
+
+      if (response.ok) {
+        await fetchAddresses();
+        alert('Default address updated!');
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Failed to update default address');
+      }
+    } catch (error) {
+      console.error('Set default address error:', error);
+      alert('Failed to update default address');
+    }
   };
 
   // Loading state
@@ -252,7 +431,7 @@ export default function Profile() {
                       <span className="text-gray-600">Total Orders:</span>
                       <span className="font-semibold text-[#2F674A]">{totalOrders}</span>
                     </div>
-                    <div className="flex justify-between">
+                    {/* <div className="flex justify-between">
                       <span className="text-gray-600">Total Spent:</span>
                       <span className="font-semibold text-[#2F674A]">₹{totalSpent}</span>
                     </div>
@@ -260,6 +439,10 @@ export default function Profile() {
                       <span className="text-gray-600">Reviews:</span>
                       <span className="font-semibold">{totalReviews}</span>
                     </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Addresses:</span>
+                      <span className="font-semibold text-[#2F674A]">{addresses.length}</span>
+                    </div> */}
                   </div>
                 </CardContent>
               </Card>
@@ -309,8 +492,9 @@ export default function Profile() {
               )}
             </div>
 
-            {/* Profile Details Form */}
-            <div className="lg:col-span-2">
+            {/* Main Content Area */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* Profile Details Form */}
               <Card className="bg-white">
                 <CardHeader>
                   <div className="flex justify-between items-center">
@@ -389,23 +573,24 @@ export default function Profile() {
                       />
                     </div>
 
-                    {/* Address */}
-                    <div>
+                    {/* Legacy Address (Optional - can be removed after migration) */}
+                    {/* <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Address
+                        Legacy Address
                       </label>
                       <textarea
                         name="userAddress"
                         value={formData.userAddress}
                         onChange={handleInputChange}
                         disabled={!editing}
-                        rows={4}
+                        rows={3}
                         className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent ${
                           !editing ? 'bg-gray-50' : ''
                         }`}
-                        placeholder="Enter your complete address"
+                        placeholder="Legacy address field"
                       />
-                    </div>
+                      <p className="text-xs text-gray-500 mt-1">Use the Address Book below for better address management</p>
+                    </div> */}
 
                     {/* User ID (Read-only) */}
                     <div>
@@ -423,8 +608,90 @@ export default function Profile() {
                 </CardContent>
               </Card>
 
+              {/* Address Book */}
+              <Card className="bg-white">
+                <CardHeader>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <CardTitle className="text-2xl text-black">Address Book</CardTitle>
+                      <CardDescription>Manage your delivery addresses</CardDescription>
+                    </div>
+                    <ButtonDemo
+                      label="Add New Address"
+                      bgColor="green"
+                      onClick={() => openAddressModal()}
+                    />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {addresses.length === 0 ? (
+                    <div className="text-center py-12">
+                      <div className="text-6xl mb-4">📍</div>
+                      <h3 className="text-xl font-semibold text-gray-700 mb-2">No Addresses Added</h3>
+                      <p className="text-gray-500 mb-6">Add your first delivery address to get started</p>
+                      <ButtonDemo
+                        label="Add Your First Address"
+                        bgColor="green"
+                        onClick={() => openAddressModal()}
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {addresses.map((address) => (
+                        <div
+                          key={address.addressId}
+                          className={`p-4 rounded-lg border-2 ${
+                            address.isDefault
+                              ? 'border-[#2F674A] bg-green-50'
+                              : 'border-gray-200 bg-gray-50'
+                          }`}
+                        >
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <h4 className="font-semibold text-lg text-black">
+                                  {address.addressLabel}
+                                </h4>
+                                {address.isDefault && (
+                                  <span className="px-2 py-1 bg-[#2F674A] text-white text-xs rounded-full">
+                                    Default
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-gray-700 mb-1">{address.fullAddress}</p>
+                              {address.phoneNumber && (
+                                <p className="text-gray-600 text-sm">📞 {address.phoneNumber}</p>
+                              )}
+                            </div>
+                            <div className="flex flex-col gap-2 ml-4">
+                              <ButtonDemo
+                                label="Edit"
+                                bgColor="black"
+                                onClick={() => openAddressModal(address)}
+                              />
+                              {!address.isDefault && (
+                                <ButtonDemo
+                                  label="Set Default"
+                                  bgColor="white"
+                                  onClick={() => setDefaultAddress(address.addressId)}
+                                />
+                              )}
+                              <ButtonDemo
+                                label="Delete"
+                                bgColor="red"
+                                onClick={() => deleteAddress(address.addressId)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
               {/* Account Actions */}
-              <Card className="bg-white mt-6">
+              <Card className="bg-white">
                 <CardHeader>
                   <CardTitle className="text-lg text-black">Account Actions</CardTitle>
                 </CardHeader>
@@ -451,6 +718,179 @@ export default function Profile() {
             </div>
           </div>
         </div>
+
+        {/* Address Modal */}
+        {showAddressModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-bold text-black">
+                    {editingAddressId ? 'Edit Address' : 'Add New Address'}
+                  </h2>
+                  <button
+                    onClick={closeAddressModal}
+                    className="text-gray-500 hover:text-gray-700 text-2xl"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Address Label */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Address Label *
+                    </label>
+                    <input
+                      type="text"
+                      name="addressLabel"
+                      value={addressFormData.addressLabel}
+                      onChange={handleAddressInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
+                      placeholder="e.g., Home, Office, Mom's House"
+                    />
+                  </div>
+
+                  {/* Address Line 1 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Address Line 1 *
+                    </label>
+                    <input
+                      type="text"
+                      name="addressLine1"
+                      value={addressFormData.addressLine1}
+                      onChange={handleAddressInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
+                      placeholder="Street address, P.O. Box"
+                    />
+                  </div>
+
+                  {/* Address Line 2 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Address Line 2
+                    </label>
+                    <input
+                      type="text"
+                      name="addressLine2"
+                      value={addressFormData.addressLine2}
+                      onChange={handleAddressInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
+                      placeholder="Apartment, suite, building, floor, etc."
+                    />
+                  </div>
+
+                  {/* City and State */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        City *
+                      </label>
+                      <input
+                        type="text"
+                        name="city"
+                        value={addressFormData.city}
+                        onChange={handleAddressInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
+                        placeholder="City"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        State *
+                      </label>
+                      <input
+                        type="text"
+                        name="state"
+                        value={addressFormData.state}
+                        onChange={handleAddressInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
+                        placeholder="State"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Postal Code and Country */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Postal Code *
+                      </label>
+                      <input
+                        type="text"
+                        name="postalCode"
+                        value={addressFormData.postalCode}
+                        onChange={handleAddressInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
+                        placeholder="123456"
+                        maxLength="6"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Country *
+                      </label>
+                      <input
+                        type="text"
+                        name="country"
+                        value={addressFormData.country}
+                        onChange={handleAddressInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
+                        placeholder="Country"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Phone Number */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Phone Number
+                    </label>
+                    <input
+                      type="tel"
+                      name="phoneNumber"
+                      value={addressFormData.phoneNumber}
+                      onChange={handleAddressInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
+                      placeholder="Phone number for this address"
+                    />
+                  </div>
+
+                  {/* Default Address Checkbox */}
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="isDefault"
+                      name="isDefault"
+                      checked={addressFormData.isDefault}
+                      onChange={handleAddressInputChange}
+                      className="h-4 w-4 text-[#2F674A] focus:ring-[#2F674A] border-gray-300 rounded"
+                    />
+                    <label htmlFor="isDefault" className="ml-2 block text-sm text-gray-900">
+                      Set as default address
+                    </label>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-3 pt-4">
+                    <ButtonDemo
+                      label="Cancel"
+                      bgColor="black"
+                      onClick={closeAddressModal}
+                    />
+                    <ButtonDemo
+                      label={addressSaving ? "Saving..." : editingAddressId ? "Update Address" : "Add Address"}
+                      bgColor="green"
+                      onClick={saveAddress}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </>
   )
