@@ -431,18 +431,18 @@ export default function Profile() {
                       <span className="text-gray-600">Total Orders:</span>
                       <span className="font-semibold text-[#2F674A]">{totalOrders}</span>
                     </div>
-                    <div className="flex justify-between">
+                    {/* <div className="flex justify-between">
                       <span className="text-gray-600">Total Spent:</span>
                       <span className="font-semibold text-[#2F674A]">₹{totalSpent}</span>
                     </div>
-                    {/* <div className="flex justify-between">
+                    <div className="flex justify-between">
                       <span className="text-gray-600">Reviews:</span>
                       <span className="font-semibold">{totalReviews}</span>
-                    </div> */}
+                    </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Addresses:</span>
                       <span className="font-semibold text-[#2F674A]">{addresses.length}</span>
-                    </div>
+                    </div> */}
                   </div>
                 </CardContent>
               </Card>
