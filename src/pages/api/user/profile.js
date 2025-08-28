@@ -45,6 +45,8 @@ export default async function handler(req, res) {
         _count: { orderId: true }
       })
 
+      console.log(orderStats._count);
+
       // Get recent orders
       const recentOrders = await prisma.orders.findMany({
         where: { userId: parseInt(userId) },
@@ -58,10 +60,12 @@ export default async function handler(req, res) {
         take: 3
       })
 
+
+      console.log(orderStats._count.orderId);
       const profileData = {
         ...userProfile,
         statistics: {
-          totalOrders: orderStats._count || 0,
+          totalOrders: orderStats._count.orderId || 0,
           totalSpent: orderStats._sum.orderAmount || 0,
           totalReviews: userProfile._count.reviews,
           activeCartItems: userProfile._count.cart
