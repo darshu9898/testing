@@ -22,6 +22,7 @@ model Users {
   cart     Cart[]
   payments Payments[]
   reviews  Reviews[]
+  addresses UserAddresses []
 }
 
 model Products {
@@ -120,4 +121,27 @@ model AdminSessions {
   @@index([expires_at])
   @@index([last_access])
   @@map("admin_sessions")
+}
+
+model UserAddresses {
+  addressId    Int      @id @default(autoincrement())
+  userId       Int
+  addressLabel String
+  addressLine1 String
+  addressLine2 String?
+  city         String
+  state        String
+  postalCode   String
+  country      String   @default("India")
+  phoneNumber  String?
+  isDefault    Boolean  @default(false)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  // Relations
+  user Users @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isDefault])
+  @@unique([userId, addressLabel], map: "unique_user_address_label")
 }
