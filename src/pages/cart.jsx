@@ -165,9 +165,9 @@ export default function Cart() {
     setIsCheckingOut(true);
     // Navigate to checkout page (to be implemented later)
     setTimeout(() => {
-      alert("Checkout functionality will be implemented soon!");
+      router.push('/checkout')
       setIsCheckingOut(false);
-    }, 1000);
+    }, 500);
   };
 
   if (loading) {
