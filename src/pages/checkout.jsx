@@ -8,7 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 
 export default function Checkout() {
   const router = useRouter();
-  const { user, isAuthenticated } = useAuth();
+    const { user, isAuthenticated } = useAuth();
   
   // State management
   const [cartItems, setCartItems] = useState([]);
@@ -344,7 +344,7 @@ export default function Checkout() {
               <Card className="bg-white">
                 <CardHeader>
                   <CardTitle className="text-xl text-black flex items-center gap-2">
-                    <span>🏠</span> Delivering to {user.userName}
+                    <span>🏠</span> Delivering to {user.user_metadata.full_name}
                   </CardTitle>
                   <CardDescription>
                     Choose where you want your order delivered
