@@ -316,14 +316,14 @@ export default function Checkout() {
                   
                   {/* Promo Code Section */}
                   <div className="border-t pt-4 mt-4">
-                    <h4 className="font-medium text-black mb-2">Have a promo code?</h4>
+                    <h4 className="font-bold text-black mb-2">Have a promo code?</h4>
                     <div className="flex gap-2">
                       <input
                         type="text"
                         placeholder="Enter promo code"
                         value={promoCode}
                         onChange={(e) => setPromoCode(e.target.value)}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
+                        className="flex-1 px-3 py-2 border border-gray-600 text-gray-900 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-[#2F674A] bg-white"
                       />
                       <ButtonDemo
                         label="Apply"
@@ -346,7 +346,7 @@ export default function Checkout() {
                   <CardTitle className="text-xl text-black flex items-center gap-2">
                     <span>🏠</span> Delivering to {user.user_metadata.full_name}
                   </CardTitle>
-                  <CardDescription>
+                  <CardDescription className="text-gray-700">
                     Choose where you want your order delivered
                   </CardDescription>
                 </CardHeader>
@@ -509,7 +509,7 @@ export default function Checkout() {
                   <CardTitle className="text-xl text-black flex items-center gap-2">
                     <span>💳</span> Payment Method
                   </CardTitle>
-                  <CardDescription>
+                  <CardDescription className="text-gray-700">
                     Choose your preferred payment method
                   </CardDescription>
                 </CardHeader>
@@ -610,7 +610,8 @@ export default function Checkout() {
 
             {/* Order Total Sidebar */}
             <div className="lg:col-span-1">
-              <Card className="bg-white sticky top-8">
+              <div className="sticky top-8 space-y-4"></div>
+              <Card className="bg-white relative z-10">
                 <CardHeader>
                   <CardTitle className="text-xl text-black">Order Total</CardTitle>
                 </CardHeader>
@@ -619,7 +620,7 @@ export default function Checkout() {
                   <div className="space-y-3">
                     <div className="flex justify-between">
                       <span className="text-gray-600">Subtotal ({cartItems.length} items)</span>
-                      <span className="font-medium">₹{subtotal}</span>
+                      <span className="font-medium text-gray-900">₹{subtotal}</span>
                     </div>
                     
                     {discount > 0 && (
@@ -645,10 +646,10 @@ export default function Checkout() {
                     
                     <div className="flex justify-between">
                       <span className="text-gray-600">Tax (GST 18%)</span>
-                      <span className="font-medium">₹{tax}</span>
+                      <span className="font-medium text-gray-900">₹{tax}</span>
                     </div>
                     
-                    <div className="border-t pt-3 flex justify-between text-lg font-bold">
+                    <div className="border-t pt-2 flex justify-between text-lg font-bold text-gray-900">
                       <span>Total Amount</span>
                       <span className="text-[#2F674A]">
                         ₹{Math.round(finalTotal + (paymentMethod === 'cod' ? 25 : 0))}
@@ -736,22 +737,22 @@ export default function Checkout() {
                   <div className="grid grid-cols-2 gap-4 text-center">
                     <div>
                       <div className="text-2xl mb-1">🏆</div>
-                      <p className="text-xs font-medium">5000+</p>
+                      <p className="text-xs text-gray-600">5000+</p>
                       <p className="text-xs text-gray-600">Happy Customers</p>
                     </div>
                     <div>
                       <div className="text-2xl mb-1">⭐</div>
-                      <p className="text-xs font-medium">4.8/5</p>
+                      <p className="text-xs text-gray-600">4.8/5</p>
                       <p className="text-xs text-gray-600">Customer Rating</p>
                     </div>
                     <div>
                       <div className="text-2xl mb-1">🚚</div>
-                      <p className="text-xs font-medium">Free</p>
+                      <p className="text-xs text-gray-600">Free</p>
                       <p className="text-xs text-gray-600">Shipping ₹499+</p>
                     </div>
                     <div>
                       <div className="text-2xl mb-1">🌿</div>
-                      <p className="text-xs font-medium">100%</p>
+                      <p className="text-xs text-gray-600">100%</p>
                       <p className="text-xs text-gray-600">Natural</p>
                     </div>
                   </div>
