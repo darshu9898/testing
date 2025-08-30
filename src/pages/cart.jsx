@@ -332,7 +332,7 @@ export default function Cart() {
                           placeholder="Enter code"
                           value={promoCode}
                           onChange={(e) => setPromoCode(e.target.value)}
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
+                          className="flex-1 px-3 py-2 border border-gray-600 text-gray-900 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-[#2F674A] bg-white"
                         />
                         <ButtonDemo
                           label="Apply"
@@ -351,7 +351,7 @@ export default function Cart() {
                     <div className="space-y-2">
                       <div className="flex justify-between">
                         <span className="text-gray-600">Subtotal</span>
-                        <span className="font-bold">₹{subtotal}</span>
+                        <span className="font-bold text-gray-900">₹{subtotal}</span>
                       </div>
                       {discount > 0 && (
                         <div className="flex justify-between text-green-600">
@@ -370,9 +370,9 @@ export default function Cart() {
                           Add ₹{499 - subtotal} more for free shipping
                         </p>
                       )}
-                      <div className="border-t pt-2 flex justify-between text-lg font-bold">
+                      <div className="border-t pt-2 flex justify-between text-lg font-bold text-gray-900">
                         <span>Total</span>
-                        <span className="text-[#2F674A]">₹{Math.round(total)}</span>
+                        <span className="text-[#2F674A] text-gray-900">₹{Math.round(total)}</span>
                       </div>
                     </div>
 
@@ -398,19 +398,20 @@ export default function Cart() {
                 </Card>
 
                 {/* Payment Methods */}
-                <Card className="bg-white relative z-10">
+                <Card className="bg-white relative z-10 shadow-md">
                   <CardHeader>
-                    <CardTitle className="text-lg text-black">We Accept</CardTitle>
+                    <CardTitle className="text-lg font-bold text-gray-900">We Accept</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-4 gap-2 text-center text-xs">
-                      <div className="bg-blue-100 p-2 rounded">💳 Cards</div>
-                      <div className="bg-orange-100 p-2 rounded">📱 UPI</div>
-                      <div className="bg-green-100 p-2 rounded">🏦 Banking</div>
-                      <div className="bg-purple-100 p-2 rounded">💰 COD</div>
+                    <div className="grid grid-cols-4 gap-2 text-center text-sm font-semibold">
+                      <div className="bg-blue-500 text-white p-2 rounded-lg shadow">Card</div>
+                      <div className="bg-orange-500 text-white p-2 rounded-lg shadow">UPI</div>
+                      <div className="bg-green-600 text-white p-2 rounded-lg shadow">Banking</div>
+                      <div className="bg-purple-600 text-white p-2 rounded-lg shadow">COD</div>
                     </div>
                   </CardContent>
                 </Card>
+
               </div>
             </div>
           </div>
