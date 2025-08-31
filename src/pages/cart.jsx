@@ -16,6 +16,32 @@ export default function Cart() {
   const [discount, setDiscount] = useState(0);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
 
+  // Helper function to get random image (same as products page)
+  const getRandomImage = (productId) => {
+    return `https://picsum.photos/seed/${productId}/400/300`;
+  };
+
+  // Helper function to validate image source
+  const getValidImageSrc = (productImage, productId) => {
+    // If we have a valid image URL, use it
+    if (productImage && 
+        productImage !== 'okay' && 
+        productImage !== '' && 
+        productImage !== 'null' &&
+        productImage !== 'undefined' &&
+        (productImage.startsWith('/') || productImage.startsWith('http'))) {
+      return productImage;
+    }
+    
+    // If productId exists, use random image (same as products page)
+    if (productId) {
+      return getRandomImage(productId);
+    }
+    
+    // Final fallback
+    return '/product.png';
+  };
+
   // Fetch cart items
   const fetchCart = async () => {
     try {
@@ -43,6 +69,18 @@ export default function Cart() {
   useEffect(() => {
     fetchCart();
   }, []);
+
+  // Debug: Log cart items to check for invalid images
+  useEffect(() => {
+    if (cartItems.length > 0) {
+      console.log('Cart items with images:', cartItems.map(item => ({
+        id: item.productId,
+        name: item.product?.productName,
+        image: item.product?.productImage,
+        validImage: getValidImageSrc(item.product?.productImage)
+      })));
+    }
+  }, [cartItems]);
 
   // Update quantity
   const updateQuantity = async (productId, newQuantity) => {
@@ -255,10 +293,14 @@ export default function Cart() {
                       <div key={item.cartId} className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 border-b border-gray-200 last:border-b-0">
                         <div className="relative w-24 h-24 flex-shrink-0">
                           <Image
-                            src={item.product?.productImage || '/product.png'}
+                            src={getValidImageSrc(item.product?.productImage, item.productId)}
                             alt={item.product?.productName || 'Product'}
                             fill
                             className="object-cover rounded-lg"
+                            onError={(e) => {
+                              console.error('Image load error:', e.target.src);
+                              e.target.src = '/product.png';
+                            }}
                           />
                         </div>
                         
@@ -430,10 +472,14 @@ export default function Cart() {
                   <CardContent className="p-4">
                     <div className="relative h-32 mb-3">
                       <Image
-                        src={product.image}
+                        src={getValidImageSrc(product.image, product.id)}
                         alt={product.name}
                         fill
                         className="object-cover rounded-lg"
+                        onError={(e) => {
+                          console.error('Recommended product image load error:', e.target.src);
+                          e.target.src = '/product.png';
+                        }}
                       />
                     </div>
                     <h3 className="font-bold text-sm mb-2">{product.name}</h3>
