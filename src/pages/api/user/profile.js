@@ -2,9 +2,18 @@
 import { getContext } from '@/lib/getContext'
 import prisma from '@/lib/prisma'
 
+// Utility function to serialize BigInt to string
+function serializeBigInt(data) {
+  return JSON.parse(
+    JSON.stringify(data, (key, value) =>
+      typeof value === "bigint" ? value.toString() : value // Convert BigInt to string
+    )
+  );
+}
+
 export default async function handler(req, res) {
   console.log(`📥 User profile request: ${req.method} ${req.url}`)
-  
+
   try {
     const { userId, user, isAuthenticated } = await getContext(req, res)
 
@@ -86,7 +95,7 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         success: true,
-        profile: profileData
+        profile: serializeBigInt(profileData) // Serialize BigInt before sending response
       })
     }
 
@@ -140,10 +149,10 @@ export default async function handler(req, res) {
         return res.status(200).json({
           success: true,
           message: 'Profile updated successfully',
-          profile: {
+          profile: serializeBigInt({
             ...updatedProfile,
             userPhone: updatedProfile.userPhone?.toString() || null
-          }
+          })
         })
 
       } catch (dbError) {
