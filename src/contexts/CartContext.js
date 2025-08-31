@@ -1,4 +1,4 @@
-// src/contexts/CartContext.js - Optimized cart context with minimal re-renders
+// src/contexts/CartContext.js - Optimized cart context with immediate state updates
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 
@@ -56,7 +56,7 @@ export const CartProvider = ({ children }) => {
     const lastFetch = cartState.lastFetch
     if (!force && lastFetch && (now - lastFetch) < 2000) {
       console.log('🛒 CartContext: Fetch too recent, skipping')
-      return
+      return;
     }
 
     fetchingRef.current = true
@@ -64,10 +64,12 @@ export const CartProvider = ({ children }) => {
     try {
       console.log('🛒 CartContext: Fetching cart data...')
       
-      updateCartState({ 
-        loading: true, 
-        error: null 
-      })
+      if (!force) {
+        updateCartState({ 
+          loading: true, 
+          error: null 
+        })
+      }
 
       const response = await fetch('/api/cart', {
         method: 'GET',
@@ -106,7 +108,7 @@ export const CartProvider = ({ children }) => {
         error: error.message,
         lastFetch: now
       })
-
+      
       // Retry logic with exponential backoff
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current)
@@ -122,7 +124,7 @@ export const CartProvider = ({ children }) => {
     }
   }, [cartState.lastFetch, updateCartState])
 
-  // Optimized cart operations
+  // Optimized cart operations with immediate state updates
   const addToCart = useCallback(async (productId, quantity = 1) => {
     try {
       console.log(`🛒 CartContext: Adding ${quantity}x product ${productId}`)
@@ -142,19 +144,41 @@ export const CartProvider = ({ children }) => {
         throw new Error(result.error || 'Failed to add item to cart')
       }
 
-      console.log('✅ CartContext: Item added successfully')
+      console.log('✅ CartContext: Item added successfully', result)
       
-      // Immediate optimistic update
+      // Immediate optimistic update for immediate UI feedback
       if (result.action === 'created' && result.item) {
-        updateCartState(prev => ({
-          ...prev,
-          items: [...prev.items, result.item],
-          count: prev.count + 1,
-          total: prev.total + (result.item.product?.productPrice || 0) * quantity
-        }))
+        updateCartState(prev => {
+          const newItems = [...prev.items, result.item]
+          const newCount = newItems.length
+          const newTotal = newItems.reduce((sum, item) => sum + (item.itemTotal || 0), 0)
+          
+          return {
+            ...prev,
+            items: newItems,
+            count: newCount,
+            total: newTotal
+          }
+        })
+      } else if (result.action === 'updated' && result.item) {
+        // Handle quantity updates for existing items
+        updateCartState(prev => {
+          const newItems = prev.items.map(item => 
+            item.productId === productId ? result.item : item
+          )
+          const newCount = newItems.length
+          const newTotal = newItems.reduce((sum, item) => sum + (item.itemTotal || 0), 0)
+          
+          return {
+            ...prev,
+            items: newItems,
+            count: newCount,
+            total: newTotal
+          }
+        })
       }
 
-      // Fetch fresh data to ensure consistency
+      // Fetch fresh data to ensure consistency (delayed to allow optimistic update to show first)
       setTimeout(() => fetchCart(true), 100)
       
       return result
@@ -167,6 +191,24 @@ export const CartProvider = ({ children }) => {
   const updateCartItem = useCallback(async (productId, quantity) => {
     try {
       console.log(`🛒 CartContext: Updating product ${productId} to quantity ${quantity}`)
+      
+      // Optimistic update first
+      updateCartState(prev => {
+        const newItems = prev.items.map(item => {
+          if (item.productId === productId) {
+            const newItemTotal = (item.product?.productPrice || 0) * quantity
+            return { ...item, quantity, itemTotal: newItemTotal }
+          }
+          return item
+        })
+        const newTotal = newItems.reduce((sum, item) => sum + (item.itemTotal || 0), 0)
+        
+        return {
+          ...prev,
+          items: newItems,
+          total: newTotal
+        }
+      })
       
       const response = await fetch(`/api/cart/${productId}`, {
         method: 'PATCH',
@@ -181,23 +223,41 @@ export const CartProvider = ({ children }) => {
 
       if (!response.ok) {
         throw new Error(result.error || 'Failed to update cart item')
+        // Revert optimistic update on error
+        fetchCart(true)
       }
 
       console.log('✅ CartContext: Item updated successfully')
       
-      // Immediate fresh fetch
-      fetchCart(true)
+      // Fetch fresh data to ensure consistency
+      setTimeout(() => fetchCart(true), 100)
       
       return result
     } catch (error) {
       console.error('❌ CartContext: Update cart item error:', error)
+      // Revert optimistic update on error
+      fetchCart(true)
       throw error
     }
-  }, [fetchCart])
+  }, [fetchCart, updateCartState])
 
   const removeFromCart = useCallback(async (productId) => {
     try {
       console.log(`🛒 CartContext: Removing product ${productId}`)
+      
+      // Optimistic update first (immediate feedback)
+      updateCartState(prev => {
+        const newItems = prev.items.filter(item => item.productId !== productId)
+        const newCount = newItems.length
+        const newTotal = newItems.reduce((sum, item) => sum + (item.itemTotal || 0), 0)
+        
+        return {
+          ...prev,
+          items: newItems,
+          count: newCount,
+          total: newTotal
+        }
+      })
       
       const response = await fetch(`/api/cart/${productId}`, {
         method: 'DELETE',
@@ -208,23 +268,20 @@ export const CartProvider = ({ children }) => {
 
       if (!response.ok) {
         throw new Error(result.error || 'Failed to remove cart item')
+        // Revert optimistic update on error
+        fetchCart(true)
       }
 
       console.log('✅ CartContext: Item removed successfully')
       
-      // Optimistic update
-      updateCartState(prev => ({
-        ...prev,
-        items: prev.items.filter(item => item.productId !== productId),
-        count: Math.max(0, prev.count - 1)
-      }))
-
-      // Fresh fetch for accurate data
+      // Fresh fetch for accuracy (delayed to allow optimistic update to show first)
       setTimeout(() => fetchCart(true), 100)
       
       return result
     } catch (error) {
       console.error('❌ CartContext: Remove from cart error:', error)
+      // Revert optimistic update on error
+      fetchCart(true)
       throw error
     }
   }, [updateCartState, fetchCart])
@@ -233,23 +290,32 @@ export const CartProvider = ({ children }) => {
     try {
       console.log('🛒 CartContext: Clearing entire cart')
       
-      const promises = cartItems.map(item => 
-        removeFromCart(item.productId)
-      )
-      
-      await Promise.all(promises)
-      
+      // Optimistic update first
       updateCartState({
         items: [],
         count: 0,
         total: 0
       })
       
+      const promises = cartItems.map(item => 
+        fetch(`/api/cart/${item.productId}`, {
+          method: 'DELETE',
+          credentials: 'include'
+        })
+      )
+      
+      await Promise.all(promises)
+      
+      // Fetch fresh data to ensure consistency
+      setTimeout(() => fetchCart(true), 100)
+      
     } catch (error) {
       console.error('❌ CartContext: Clear cart error:', error)
+      // Revert on error
+      fetchCart(true)
       throw error
     }
-  }, [cartItems, removeFromCart, updateCartState])
+  }, [cartItems, updateCartState, fetchCart])
 
   // Enhanced cart refresh for external triggers
   const refreshCart = useCallback((immediate = false) => {

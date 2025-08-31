@@ -5,16 +5,26 @@ import Image from 'next/image';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/hooks/useAuth';
+import { useCart } from '@/contexts/CartContext';
 
 export default function Cart() {
   const router = useRouter();
   const { user } = useAuth();
-  const [cartItems, setCartItems] = useState([]);
-  const [loading, setLoading] = useState(true);
+  
   const [updating, setUpdating] = useState({});
   const [promoCode, setPromoCode] = useState("");
   const [discount, setDiscount] = useState(0);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  
+  // Use CartContext for all cart data - removed local state conflicts
+  const { 
+    cartItems, 
+    loading, 
+    updateCartItem, 
+    removeFromCart, 
+    addToCart: addToCartContext,
+    refreshCart 
+  } = useCart();
 
   // Helper function to get random image (same as products page)
   const getRandomImage = (productId) => {
@@ -42,34 +52,6 @@ export default function Cart() {
     return '/product.png';
   };
 
-  // Fetch cart items
-  const fetchCart = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch('/api/cart', {
-        credentials: 'include',
-        cache: 'no-cache'
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setCartItems(data.items || []);
-      } else {
-        console.error('Failed to fetch cart');
-        setCartItems([]);
-      }
-    } catch (error) {
-      console.error('Cart fetch error:', error);
-      setCartItems([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchCart();
-  }, []);
-
   // Debug: Log cart items to check for invalid images
   useEffect(() => {
     if (cartItems.length > 0) {
@@ -89,37 +71,11 @@ export default function Cart() {
     setUpdating(prev => ({ ...prev, [productId]: true }));
     
     try {
-      const response = await fetch(`/api/cart/${productId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ quantity: newQuantity })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        
-        if (data.action === 'deleted') {
-          // Remove item from state
-          setCartItems(prev => prev.filter(item => item.productId !== productId));
-        } else if (data.action === 'updated') {
-          // Update item in state
-          setCartItems(prev => prev.map(item => 
-            item.productId === productId 
-              ? { ...item, quantity: data.item.quantity, itemTotal: data.item.product.productPrice * data.item.quantity }
-              : item
-          ));
-        }
-      } else {
-        const error = await response.json();
-        alert(error.error || 'Failed to update quantity');
-        // Refresh cart to sync state
-        fetchCart();
-      }
+      await updateCartItem(productId, newQuantity);
     } catch (error) {
       console.error('Update quantity error:', error);
       alert('Failed to update quantity');
-      fetchCart();
+      refreshCart(true); // Use context refresh instead
     } finally {
       setUpdating(prev => ({ ...prev, [productId]: false }));
     }
@@ -132,20 +88,11 @@ export default function Cart() {
     setUpdating(prev => ({ ...prev, [productId]: true }));
     
     try {
-      const response = await fetch(`/api/cart/${productId}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      });
-
-      if (response.ok) {
-        setCartItems(prev => prev.filter(item => item.productId !== productId));
-      } else {
-        const error = await response.json();
-        alert(error.error || 'Failed to remove item');
-      }
+      await removeFromCart(productId);
     } catch (error) {
       console.error('Remove item error:', error);
       alert('Failed to remove item');
+      refreshCart(true); // Use context refresh instead
     } finally {
       setUpdating(prev => ({ ...prev, [productId]: false }));
     }
@@ -154,24 +101,7 @@ export default function Cart() {
   // Add item to cart (for recommended products)
   const addToCart = async (productId, quantity = 1) => {
     try {
-      const response = await fetch('/api/cart', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ productId, quantity })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.action === 'created') {
-          fetchCart(); // Refresh cart
-        } else {
-          alert('Item already in cart');
-        }
-      } else {
-        const error = await response.json();
-        alert(error.error || 'Failed to add item to cart');
-      }
+      await addToCartContext(productId, quantity);
     } catch (error) {
       console.error('Add to cart error:', error);
       alert('Failed to add item to cart');
