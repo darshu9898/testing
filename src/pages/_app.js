@@ -6,6 +6,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/router";
 import { useState, useEffect } from "react";
 
+// Fix BigInt serialization globally
+if (typeof BigInt !== "undefined") {
+  BigInt.prototype.toJSON = function () {
+    return this.toString(); // Convert BigInt to string
+  };
+}
+
 export default function App({ Component, pageProps }) {
   const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
