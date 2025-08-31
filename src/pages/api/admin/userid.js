@@ -2,10 +2,33 @@
 import prisma from '@/lib/prisma'
 import { requireAdminAuth } from '@/lib/adminAuth'
 
+// Generic BigInt serialization fix - works across all machines/Node versions
 function replacer(key, value) {
   return typeof value === 'bigint' ? value.toString() : value
 }
 
+// Deep convert BigInt to string in nested objects
+function convertBigInts(obj) {
+  if (obj === null || obj === undefined) return obj
+  
+  if (typeof obj === 'bigint') {
+    return obj.toString()
+  }
+  
+  if (Array.isArray(obj)) {
+    return obj.map(convertBigInts)
+  }
+  
+  if (typeof obj === 'object') {
+    const converted = {}
+    for (const [key, value] of Object.entries(obj)) {
+      converted[key] = convertBigInts(value)
+    }
+    return converted
+  }
+  
+  return obj
+}
 
 export default async function handler(req, res) {
   try {
@@ -61,8 +84,8 @@ export default async function handler(req, res) {
         return res.status(404).json({ error: 'User not found' })
       }
 
-      // Calculate summary statistics
-      const totalSpent = user.orders.reduce((sum, order) => sum + order.orderAmount, 0)
+      // Calculate summary statistics with BigInt handling
+      const totalSpent = user.orders.reduce((sum, order) => sum + Number(order.orderAmount || 0), 0)
       const totalItemsPurchased = user.orders.reduce((sum, order) => {
         return sum + order.orderDetails.reduce((itemSum, detail) => itemSum + detail.quantity, 0)
       }, 0)
@@ -74,10 +97,12 @@ export default async function handler(req, res) {
         return acc
       }, {})
 
-      return res.status(200).json({
+      // Prepare response with BigInt conversion
+      const responseData = {
         success: true,
         user: {
           ...user,
+          userPhone: user.userPhone ? user.userPhone.toString() : null, // Explicit BigInt conversion
           summary: {
             totalOrders: user.orders.length,
             totalSpent,
@@ -87,7 +112,15 @@ export default async function handler(req, res) {
             ordersByStatus
           }
         }
-      })
+      }
+
+      // Deep convert any remaining BigInts
+      const safeResponseData = convertBigInts(responseData)
+
+      return res
+        .status(200)
+        .setHeader('Content-Type', 'application/json')
+        .send(JSON.stringify(safeResponseData, replacer))
     }
 
     // ============== PUT: Update User Details ==============
@@ -105,7 +138,7 @@ export default async function handler(req, res) {
       } = req.body
 
       // Validation
-      if (!userName && !userEmail && !userPhone && !userAddress) {
+      if (!userName && !userEmail && userPhone === undefined && userAddress === undefined) {
         return res.status(400).json({ 
           error: 'At least one field (userName, userEmail, userPhone, userAddress) is required' 
         })
@@ -120,20 +153,38 @@ export default async function handler(req, res) {
       }
 
       // Phone validation if provided
-      if (userPhone && (isNaN(userPhone) || userPhone < 0)) {
-        return res.status(400).json({ error: 'Invalid phone number' })
+      if (userPhone !== undefined && userPhone !== null && userPhone !== '') {
+        const phoneStr = userPhone.toString()
+        if (isNaN(phoneStr) || phoneStr < 0) {
+          return res.status(400).json({ error: 'Invalid phone number' })
+        }
       }
 
       // Build update data object
       const updateData = {}
       if (userName) updateData.userName = userName.trim()
       if (userEmail) updateData.userEmail = userEmail.trim().toLowerCase()
-      if (userPhone !== undefined) updateData.userPhone = userPhone ? BigInt(userPhone) : null
-      if (userAddress !== undefined) updateData.userAddress = userAddress ? userAddress.trim() : null
+      
+      // Handle BigInt phone number conversion
+      if (userPhone !== undefined) {
+        if (userPhone === null || userPhone === '') {
+          updateData.userPhone = null
+        } else {
+          try {
+            updateData.userPhone = BigInt(userPhone)
+          } catch (e) {
+            return res.status(400).json({ error: 'Invalid phone number format' })
+          }
+        }
+      }
+      
+      if (userAddress !== undefined) {
+        updateData.userAddress = userAddress ? userAddress.trim() : null
+      }
 
       try {
-      console.log(updateData.userPhone)
-      console.log('hello')
+        console.log('Updating user with data:', { ...updateData, userPhone: updateData.userPhone?.toString() })
+        
         // Update user
         const updatedUser = await prisma.users.update({
           where: { userId: userIdInt },
@@ -149,12 +200,23 @@ export default async function handler(req, res) {
           }
         })
 
-          res.setHeader("Content-Type", "application/json")
-        return res.status(200).send(JSON.stringify({
+        // Prepare response with BigInt conversion
+        const responseData = {
           success: true,
           message: 'User updated successfully',
-          user: updatedUser
-        }, replacer))
+          user: {
+            ...updatedUser,
+            userPhone: updatedUser.userPhone ? updatedUser.userPhone.toString() : null
+          }
+        }
+
+        // Deep convert any remaining BigInts
+        const safeResponseData = convertBigInts(responseData)
+
+        return res
+          .status(200)
+          .setHeader('Content-Type', 'application/json')
+          .send(JSON.stringify(safeResponseData, replacer))
 
       } catch (dbError) {
         // Handle unique constraint violations
@@ -220,6 +282,16 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Admin userid error:', error)
-    return res.status(500).json({ error: 'Internal server error' })
+    
+    // Handle BigInt errors in error responses
+    const errorResponse = { 
+      error: 'Internal server error',
+      message: error.message 
+    }
+    
+    return res
+      .status(500)
+      .setHeader('Content-Type', 'application/json')
+      .send(JSON.stringify(errorResponse, replacer))
   }
 }
