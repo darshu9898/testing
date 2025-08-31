@@ -1,3 +1,4 @@
+// src/hooks/useAuth.js - Enhanced with reliable cart merge
 import { createSupabaseBrowserClient } from '@/lib/supabase-client'
 import { useState, useEffect, createContext, useContext } from 'react'
 
@@ -64,22 +65,10 @@ export const AuthProvider = ({ children }) => {
         setUser(session?.user || null)
         setLoading(false)
         
-        // Merge guest cart when user signs in (non-blocking)
+        // Enhanced cart merge when user signs in
         if (event === 'SIGNED_IN' && session?.user) {
           console.log('🛒 AuthProvider: User signed in, attempting cart merge...')
-          try {
-            const response = await fetch('/api/cart/merge', {
-              method: 'POST',
-              credentials: 'include'
-            })
-            if (response.ok) {
-              console.log('✅ AuthProvider: Cart merge successful')
-            } else {
-              console.warn('⚠️ AuthProvider: Cart merge failed with status:', response.status)
-            }
-          } catch (error) {
-            console.warn('⚠️ AuthProvider: Cart merge failed:', error.message)
-          }
+          await handleCartMerge()
         }
       }
     )
@@ -89,6 +78,60 @@ export const AuthProvider = ({ children }) => {
       subscription?.unsubscribe()
     }
   }, [supabase])
+
+  // Enhanced cart merge function with retries
+  const handleCartMerge = async (retries = 3) => {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        console.log(`🛒 AuthProvider: Cart merge attempt ${attempt}/${retries}`)
+        
+        const response = await fetch('/api/cart/merge', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include'
+        })
+        
+        const result = await response.json()
+        
+        if (response.ok) {
+          console.log('✅ AuthProvider: Cart merge successful:', result)
+          
+          // Trigger cart refresh in any cart components
+          window.dispatchEvent(new CustomEvent('cartUpdated', { 
+            detail: { action: 'merged', itemsCount: result.itemsCount } 
+          }))
+          
+          // Also trigger specific merge event
+          window.dispatchEvent(new CustomEvent('cartMerged', { 
+            detail: { action: 'merged', itemsCount: result.itemsCount } 
+          }))
+          
+          return result
+        } else {
+          console.warn(`⚠️ AuthProvider: Cart merge attempt ${attempt} failed:`, result.error)
+          
+          if (attempt === retries) {
+            throw new Error(result.error || 'Cart merge failed after all retries')
+          }
+          
+          // Wait before retrying (exponential backoff)
+          await new Promise(resolve => setTimeout(resolve, attempt * 1000))
+        }
+      } catch (error) {
+        console.warn(`⚠️ AuthProvider: Cart merge attempt ${attempt} error:`, error.message)
+        
+        if (attempt === retries) {
+          console.error('❌ AuthProvider: Cart merge failed after all retries:', error.message)
+          return null
+        }
+        
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, attempt * 1000))
+      }
+    }
+  }
 
   const signIn = async (email, password) => {
     try {
@@ -132,6 +175,10 @@ export const AuthProvider = ({ children }) => {
           console.log('✅ AuthProvider: Session refresh successful on attempt:', sessionRefreshAttempts + 1)
           setUser(session.user)
           setLoading(false)
+          
+          // Cart merge will be handled by the auth state change listener
+          // No need to call it here to avoid double merging
+          
           return { success: true, user: session.user }
         } else if (error) {
           console.error('❌ AuthProvider: Session refresh error:', error)
@@ -162,6 +209,12 @@ export const AuthProvider = ({ children }) => {
             console.log('✅ AuthProvider: Manual session setup successful:', manualSession.user.email)
             setUser(manualSession.user)
             setLoading(false)
+            
+            // Manually trigger cart merge since auth state change might not fire
+            setTimeout(() => {
+              handleCartMerge()
+            }, 500)
+            
             return { success: true, user: manualSession.user }
           }
         } catch (manualErr) {
@@ -277,7 +330,8 @@ export const AuthProvider = ({ children }) => {
       signUp,
       signInWithGoogle,
       signOut,
-      isAuthenticated: !!user
+      isAuthenticated: !!user,
+      handleCartMerge // Expose cart merge function
     }}>
       {children}
     </AuthContext.Provider>

@@ -4,48 +4,32 @@ import Head from 'next/head';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
+import { useCart } from '@/contexts/CartContext';
 
 export default function Products() {
   const [products, setProducts] = useState([]);
-  const [cart, setCart] = useState([]);
   const router = useRouter();
+  
+  // Use CartContext instead of local cart state
+  const { addToCart } = useCart();
 
-  const addToCart = async (product, quantity = 1) => {
+  const handleAddToCart = async (product, quantity = 1) => {
     try {
-      const res = await fetch('/api/cart', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          productId: product.productId,
-          quantity,
-        }),
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        alert(error.message || 'Failed to add to cart');
-        return;
-      }
-
-      const data = await res.json();
-
-      if (data.action === 'created') {
+      const result = await addToCart(product.productId, quantity);
+      
+      if (result.action === 'created') {
         alert(`✅ ${product.productName} added to cart`);
-      } else if (data.action === 'exists') {
+      } else if (result.action === 'updated') {
+        alert(`✅ ${product.productName} quantity updated in cart`);
+      } else if (result.action === 'exists') {
         alert(`ℹ️ ${product.productName} is already in your cart`);
       }
-
-      // optional: update local cart state if you want
-      setCart((prev) => [...prev, data.item]);
 
     } catch (err) {
       console.error('Add to cart error:', err);
       alert('Something went wrong while adding to cart');
     }
   };
-
 
   const fetchProducts = async () => {
     try {
@@ -97,7 +81,7 @@ export default function Products() {
         </div>
 
         {/* Products Grid */}
-        <div className="max-w-7xl mx-auto px-4 py-">
+        <div className="max-w-7xl mx-auto px-4 py-16">
           <h2 className="text-3xl font-bold text-center mb-12 text-black">All Products</h2>
           
           {products && products.length > 0 ? (
@@ -129,7 +113,7 @@ export default function Products() {
                         <ButtonDemo
                           label="Add to Cart"
                           bgColor="green"
-                          onClick={() => addToCart(product)}
+                          onClick={() => handleAddToCart(product)}
                         />
                       ) : (
                         <span className="text-red-600 font-semibold">
