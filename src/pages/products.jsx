@@ -85,7 +85,7 @@ export default function Products() {
           <h2 className="text-3xl font-bold text-center mb-12 text-black">All Products</h2>
           
           {products && products.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 text-gray-900">
               {products.map((product) => (
                 <Card
                   key={product.productId}
@@ -135,7 +135,7 @@ export default function Products() {
           <h2 className="text-3xl font-bold text-center mb-12 text-black">
             Featured Combos
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 text-gray-900">
             {[
               {
                 name: 'Ultimate Hair Care Combo',

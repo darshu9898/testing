@@ -90,7 +90,7 @@ export default function Contact() {
                             value={formData.name}
                             onChange={handleInputChange}
                             required
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
                             placeholder="Your full name"
                           />
                         </div>
@@ -105,7 +105,7 @@ export default function Contact() {
                             value={formData.email}
                             onChange={handleInputChange}
                             required
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
                             placeholder="your.email@example.com"
                           />
                         </div>
@@ -122,12 +122,15 @@ export default function Contact() {
                             name="phone"
                             value={formData.phone}
                             onChange={handleInputChange}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
                             placeholder="+91 9876543210"
                           />
                         </div>
                         <div>
-                          <label htmlFor="subject" className="block text-sm font-bold text-gray-700 mb-2">
+                          <label
+                            htmlFor="subject"
+                            className="block text-sm font-bold text-gray-700 mb-2"
+                          >
                             Subject *
                           </label>
                           <select
@@ -136,7 +139,8 @@ export default function Contact() {
                             value={formData.subject}
                             onChange={handleInputChange}
                             required
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
+                            className={`w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent 
+                              ${formData.subject === "" ? "text-gray-500" : "text-gray-900"}`}
                           >
                             <option value="">Select a subject</option>
                             <option value="product-inquiry">Product Inquiry</option>
@@ -146,6 +150,7 @@ export default function Contact() {
                             <option value="partnership">Partnership</option>
                           </select>
                         </div>
+
                       </div>
 
                       <div>
@@ -159,7 +164,7 @@ export default function Contact() {
                           onChange={handleInputChange}
                           required
                           rows={6}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent resize-vertical"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-[#2F674A] focus:border-transparent resize-vertical"
                           placeholder="Tell us how we can help you..."
                         />
                       </div>
@@ -271,29 +276,44 @@ export default function Contact() {
 
           {/* FAQ Quick Links */}
           <div className="mt-16 bg-[#F8F0E1] rounded-lg p-8">
-            <h2 className="text-2xl font-bold text-center mb-8 text-black">Quick Help</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="text-center">
-                <div className="bg-[#2F674A] text-white w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-xl">❓</span>
+              <h2 className="text-2xl font-bold text-center mb-8 text-black">Quick Help</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                
+                {/* FAQ */}
+                <div className="text-center">
+                  <div className="bg-[#2F674A] text-white w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span className="text-xl">❓</span>
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Have Questions?</h3>
+                  <p className="text-gray-700 mb-4">Check our comprehensive FAQ section</p>
+                  <button 
+                    onClick={() => window.location.href = '/faq'}
+                    className="bg-[#2F674A] text-white px-5 py-2 rounded-lg font-medium shadow-md hover:bg-[#24553C] transition"
+                  >
+                    View FAQ
+                  </button>
                 </div>
-                <h3 className="font-bold mb-2">Have Questions?</h3>
-                <p className="text-gray-600 mb-4">Check our comprehensive FAQ section</p>
-                <ButtonDemo label="View FAQ" bgColor="green" onClick={() => window.location.href = '/faq'} />
-              </div>
-             
-              <div className="text-center">
-                <div className="bg-[#2F674A] text-white w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-xl">🔄</span>
+
+                {/* Returns */}
+                <div className="text-center">
+                  <div className="bg-[#2F674A] text-white w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span className="text-xl">🔄</span>
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Returns & Refunds</h3>
+                  <p className="text-gray-700 mb-4">Easy return process within 30 days</p>
+                  <button 
+                    onClick={() => {}}
+                    className="bg-[#2F674A] text-white px-5 py-2 rounded-lg font-medium shadow-md hover:bg-[#24553C] transition"
+                  >
+                    Return Policy
+                  </button>
                 </div>
-                <h3 className="font-bold mb-2">Returns & Refunds</h3>
-                <p className="text-gray-600 mb-4">Easy return process within 30 days</p>
-                <ButtonDemo label="Return Policy" bgColor="green" onClick={() => {}} />
+
               </div>
-            </div>
+          </div>
+
           </div>
         </div>
-      </div>
     </>
   )
 }
