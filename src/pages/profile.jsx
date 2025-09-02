@@ -418,17 +418,17 @@ export default function Profile() {
                       {userInitial}
                     </div>
                     <CardTitle className="text-xl text-black">{userName}</CardTitle>
-                    <CardDescription>{userEmail}</CardDescription>
+                    <CardDescription className="text-gray-700">{userEmail}</CardDescription>
                   </div>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Member Since:</span>
-                      <span className="font-semibold">{createdAt}</span>
+                      <span className="text-gray-900">Member Since:</span>
+                      <span className="text-gray-900">{createdAt}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Total Orders:</span>
+                      <span className="text-gray-900">Total Orders:</span>
                       <span className="font-semibold text-[#2F674A]">{totalOrders}</span>
                     </div>
                     {/* <div className="flex justify-between">
@@ -464,7 +464,7 @@ export default function Profile() {
                         return (
                           <div key={orderId} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                             <div>
-                              <p className="font-semibold text-sm">Order #{orderId}</p>
+                              <p className="font-semibold text-sm text-black">Order #{orderId}</p>
                               <p className="text-xs text-gray-600">{orderDate}</p>
                             </div>
                             <div className="text-right">
@@ -532,7 +532,7 @@ export default function Profile() {
                         type="email"
                         value={userEmail}
                         disabled
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed text-gray-600"
                       />
                       <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
                     </div>
@@ -548,7 +548,7 @@ export default function Profile() {
                         value={formData.userName}
                         onChange={handleInputChange}
                         disabled={!editing}
-                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent ${
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent text-gray-600 ${
                           !editing ? 'bg-gray-50' : ''
                         }`}
                         placeholder="Enter your full name"
@@ -566,7 +566,7 @@ export default function Profile() {
                         value={formData.userPhone}
                         onChange={handleInputChange}
                         disabled={!editing}
-                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent ${
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent text-gray-600 ${
                           !editing ? 'bg-gray-50' : ''
                         }`}
                         placeholder="Enter your phone number"
@@ -601,7 +601,7 @@ export default function Profile() {
                         type="text"
                         value={String(userId)}
                         disabled
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed text-gray-600"
                       />
                     </div>
                   </div>
@@ -614,7 +614,7 @@ export default function Profile() {
                   <div className="flex justify-between items-center">
                     <div>
                       <CardTitle className="text-2xl text-black">Address Book</CardTitle>
-                      <CardDescription>Manage your delivery addresses</CardDescription>
+                      <CardDescription className="text-gray-700">Manage your delivery addresses</CardDescription>
                     </div>
                     <ButtonDemo
                       label="Add New Address"
@@ -672,7 +672,7 @@ export default function Profile() {
                               {!address.isDefault && (
                                 <ButtonDemo
                                   label="Set Default"
-                                  bgColor="white"
+                                  bgColor="green"
                                   onClick={() => setDefaultAddress(address.addressId)}
                                 />
                               )}
@@ -704,12 +704,12 @@ export default function Profile() {
                     />
                     <ButtonDemo
                       label="Cart Items"
-                      bgColor="black"
+                      bgColor="green"
                       onClick={() => router.push('/cart')}
                     />
                     <ButtonDemo
                       label="Continue Shopping"
-                      bgColor="white"
+                      bgColor="green"
                       onClick={() => router.push('/products')}
                     />
                   </div>
