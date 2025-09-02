@@ -333,7 +333,7 @@ export default function Cart() {
                       )}
                       <div className="flex justify-between">
                         <span className="text-gray-600">Shipping</span>
-                        <span className={shipping === 0 ? "text-green-600 font-bold" : "font-bold"}>
+                        <span className={shipping === 0 ? "text-green-600 font-bold" : "text-[#2F674A] font-bold"}>
                           {shipping === 0 ? "FREE" : `₹${shipping}`}
                         </span>
                       </div>
@@ -344,7 +344,7 @@ export default function Cart() {
                       )}
                       <div className="border-t pt-2 flex justify-between text-lg font-bold text-gray-900">
                         <span>Total</span>
-                        <span className="text-[#2F674A] text-gray-900">₹{Math.round(total)}</span>
+                        <span className="text-[#2F674A]">₹{Math.round(total)}</span>
                       </div>
                     </div>
 
