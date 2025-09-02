@@ -391,7 +391,7 @@ export default function Cart() {
           {/* Recommended Products */}
           <div className="mt-16">
             <h2 className="text-2xl font-bold mb-8 text-black">You Might Also Like</h2>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-black">
               {[
                 { id: 1, name: "Neem Face Wash", price: 149, image: "/product.png" },
                 { id: 2, name: "Triphala Powder", price: 189, image: "/combo.jpg" },

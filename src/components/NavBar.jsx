@@ -220,7 +220,7 @@ export default function Navbar() {
           {/* Logo */}
           <div className="flex items-center">
             <Image
-              src="/logonew.jpg"   // make sure it's in public/
+              src="/logo2.png"   // make sure it's in public/
               alt="Trivedam Logo"
               width={40}
               height={40}
@@ -256,7 +256,7 @@ export default function Navbar() {
             <div className="flex items-center">
               <Link href="/" className="flex items-center space-x-2 group">
                 <Image
-                  src="/logonew.png"   // place logo.png inside public/
+                  src="/logo2.png"   // place logo.png inside public/
                   alt="Trivedam Logo"
                   width={40}
                   height={60}
