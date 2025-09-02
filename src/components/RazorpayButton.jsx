@@ -1,205 +1,219 @@
-// src/components/RazorpayButton.jsx
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/router'
-import { ButtonDemo } from './Button'
+// src/components/RazorpayButton.js
+import { useState } from 'react';
+import Head from 'next/head';
 
 const RazorpayButton = ({
   orderId,
   amount,
-  currency = 'INR',
   customerDetails,
   shippingAddress,
   onSuccess,
   onFailure,
   disabled = false,
-  className = "",
-  children = "Pay Now"
+  children
 }) => {
-  const router = useRouter()
-  const [loading, setLoading] = useState(false)
-  const [razorpayLoaded, setRazorpayLoaded] = useState(false)
+  const [loading, setLoading] = useState(false);
+  const [scriptLoaded, setScriptLoaded] = useState(false);
 
-  // Load Razorpay script once
-  useEffect(() => {
-    if (window.Razorpay) {
-      setRazorpayLoaded(true)
-      return
-    }
-    const script = document.createElement('script')
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
-    script.async = true
-    script.onload = () => {
-      console.log('✅ Razorpay script loaded')
-      setRazorpayLoaded(true)
-    }
-    script.onerror = () => {
-      console.error('❌ Failed to load Razorpay script')
-      alert('Payment gateway failed to load. Check your internet connection.')
-    }
-    document.body.appendChild(script)
-  }, [])
+  // Load Razorpay script
+  const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+      if (window.Razorpay) {
+        resolve(true);
+        return;
+      }
 
-  // Create Razorpay order on backend
-  const createRazorpayOrder = async () => {
-    console.log('🔄 Creating Razorpay order for DB orderId:', orderId)
-    const response = await fetch('/api/payment/create-order', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ orderId, shippingAddress })
-    })
-    const data = await response.json()
-    console.log('📦 /create-order response:', data)
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => {
+        setScriptLoaded(true);
+        resolve(true);
+      };
+      script.onerror = () => {
+        resolve(false);
+      };
+      document.body.appendChild(script);
+    });
+  };
 
-    if (!response.ok || !data.success) {
-      throw new Error(data.error || 'Failed to create payment order')
-    }
-    return data
-  }
+  const handlePayment = async () => {
+    if (loading || disabled) return;
 
-  // Verify payment with backend
-  const verifyPayment = async (paymentData) => {
-    console.log('🔍 Sending verify request:', paymentData)
-    const response = await fetch('/api/payment/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ ...paymentData, orderId })
-    })
-    const data = await response.json()
-    console.log('📦 /verify response:', data)
+    setLoading(true);
+    
+    try {
+      console.log('🚀 Starting payment process for order:', orderId);
 
-    if (!response.ok || !data.success) {
-      throw new Error(data.error || 'Payment verification failed')
-    }
-    return data
-  }
+      // Load Razorpay script
+      const scriptLoaded = await loadRazorpayScript();
+      if (!scriptLoaded) {
+        throw new Error('Failed to load payment gateway');
+      }
 
-const handlePayment = async () => {
-  console.log("🟢 handlePayment triggered");
+      // Create payment order
+      const orderResponse = await fetch('/api/payment/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          orderId: orderId,
+          shippingAddress: shippingAddress
+        })
+      });
 
-  if (!razorpayLoaded) {
-    console.warn("⚠️ Razorpay script not ready");
-    alert("Payment gateway not ready. Please wait.");
-    return;
-  }
+      if (!orderResponse.ok) {
+        const errorData = await orderResponse.json();
+        throw new Error(errorData.error || 'Failed to create payment order');
+      }
 
-  if (!orderId) {
-    console.warn("⚠️ No orderId passed to RazorpayButton");
-    alert("Order ID missing. Please refresh and try again.");
-    return;
-  }
+      const orderData = await orderResponse.json();
+      console.log('💳 Razorpay order created:', orderData.razorpayOrderId);
 
-  setLoading(true);
-
-  try {
-    // 1️⃣ Create Razorpay order on backend
-    console.log("📡 Calling /api/payment/create-order for orderId:", orderId);
-    const orderData = await createRazorpayOrder();
-    console.log("🧾 orderData from backend:", orderData);
-
-    if (!orderData?.razorpayOrderId) {
-      throw new Error("❌ No razorpayOrderId returned from backend");
-    }
-    if (!process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID) {
-      throw new Error("❌ NEXT_PUBLIC_RAZORPAY_KEY_ID is undefined in frontend");
-    }
-
-    // 2️⃣ Configure Razorpay options
-    const options = {
-      key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
-      amount: orderData.amount * 100, // ✅ always convert to paise here
-      currency: orderData.currency,
-      name: "Trivedam",
-      description: `Order #${orderId} - Natural Ayurvedic Products`,
-      image: "/logo.jpg",
-      order_id: orderData.razorpayOrderId,
-
-      prefill: {
-        name: orderData.customerDetails?.name,
-        email: orderData.customerDetails?.email,
-        contact: orderData.customerDetails?.contact || "",
-      },
-
-      notes: {
-        shipping_address: orderData.shippingAddress || "",
-        order_id: orderId.toString(),
-        items: orderData.orderDetails?.items
-          ?.map((item) => `${item.name} (${item.quantity}x)`)
-          .join(", ") || "",
-      },
-
-      theme: { color: "#2F674A" },
-
-      modal: {
-        ondismiss: () => {
-          console.log("💭 Payment modal dismissed by user");
-          setLoading(false);
+      // Configure Razorpay options
+      const options = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        amount: orderData.amount * 100, // Convert to paisa
+        currency: 'INR',
+        name: 'Trivedam',
+        description: `Order #${orderId} - Natural Ayurvedic Products`,
+        image: '/logo.png', // Your logo
+        order_id: orderData.razorpayOrderId,
+        customer: {
+          name: customerDetails.name,
+          email: customerDetails.email,
+          contact: customerDetails.contact
         },
-      },
-
-      handler: async (response) => {
-        console.log("🎉 Payment success, Razorpay response:", response);
-        try {
-          const verifyResult = await verifyPayment(response);
-          console.log("✅ Payment verified:", verifyResult);
-
-          if (onSuccess) {
-            onSuccess(verifyResult);
-          } else {
-            router.push(
-              `/order-confirmation?orderId=${orderId}&paymentId=${response.razorpay_payment_id}`
-            );
+        prefill: {
+          name: customerDetails.name,
+          email: customerDetails.email,
+          contact: customerDetails.contact
+        },
+        notes: {
+          address: shippingAddress,
+          orderId: orderId.toString()
+        },
+        theme: {
+          color: '#2F674A' // Your brand color
+        },
+        modal: {
+          ondismiss: () => {
+            console.log('Payment modal closed by user');
+            setLoading(false);
           }
-        } catch (err) {
-          console.error("❌ Verification failed:", err);
-          alert(
-            `Payment done but verification failed. Contact support with Payment ID: ${response.razorpay_payment_id}`
-          );
-          if (onFailure) onFailure(err);
-        } finally {
+        },
+        handler: async (response) => {
+          console.log('💰 Payment successful:', response);
+          
+          try {
+            // Verify payment
+            const verifyResponse = await fetch('/api/payment/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                orderId: orderId
+              })
+            });
+
+            if (verifyResponse.ok) {
+              const verifyData = await verifyResponse.json();
+              console.log('✅ Payment verified:', verifyData);
+              
+              // Call success callback
+              if (onSuccess) {
+                onSuccess({
+                  orderId: orderId,
+                  paymentId: response.razorpay_payment_id,
+                  razorpayOrderId: response.razorpay_order_id,
+                  amount: orderData.amount,
+                  verificationData: verifyData
+                });
+              }
+            } else {
+              const errorData = await verifyResponse.json();
+              throw new Error(errorData.error || 'Payment verification failed');
+            }
+          } catch (error) {
+            console.error('❌ Payment verification error:', error);
+            if (onFailure) {
+              onFailure({
+                error: error.message,
+                orderId: orderId,
+                paymentId: response.razorpay_payment_id
+              });
+            }
+          } finally {
+            setLoading(false);
+          }
+        },
+        error: (error) => {
+          console.error('❌ Razorpay payment error:', error);
+          
+          if (onFailure) {
+            onFailure({
+              error: error.description || error.reason || 'Payment failed',
+              code: error.code,
+              orderId: orderId
+            });
+          }
+          
           setLoading(false);
         }
-      },
-    };
+      };
 
-    // 3️⃣ Log and open Razorpay widget
-    console.log("🕵️ Razorpay checkout options prepared:", options);
-    const rzp = new window.Razorpay(options);
+      // Open Razorpay checkout
+      const razorpay = new window.Razorpay(options);
+      razorpay.open();
 
-    rzp.on("payment.failed", (response) => {
-      console.error("💥 Payment failed:", response.error);
-      alert(`Payment failed: ${response.error.description || "Unknown error"}`);
-      if (onFailure) onFailure(response.error);
+    } catch (error) {
+      console.error('💥 Payment initialization error:', error);
+      
+      if (onFailure) {
+        onFailure({
+          error: error.message || 'Failed to initialize payment',
+          orderId: orderId
+        });
+      }
+      
       setLoading(false);
-    });
-
-    console.log("🚀 Opening Razorpay checkout...");
-    rzp.open();
-  } catch (err) {
-    console.error("💥 Payment init error:", err);
-    alert(err.message || "Payment could not be started.");
-    if (onFailure) onFailure(err);
-    setLoading(false);
-  }
-};
-
+    }
+  };
 
   return (
-    <ButtonDemo
-      label={loading ? 'Processing...' : children}
-      bgColor="green"
-      onClick={handlePayment}
-      disabled={disabled || loading || !razorpayLoaded}
-      className={`relative ${className}`}
-    >
-      {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-green-600 bg-opacity-75 rounded-lg">
-          <div className="animate-spin text-white text-lg">⏳</div>
-        </div>
-      )}
-    </ButtonDemo>
-  )
-}
+    <>
+      <Head>
+        <script
+          src="https://checkout.razorpay.com/v1/checkout.js"
+          onLoad={() => setScriptLoaded(true)}
+        />
+      </Head>
+      
+      <button
+        onClick={handlePayment}
+        disabled={loading || disabled}
+        className={`
+          w-full py-4 px-6 rounded-lg font-bold text-white text-lg transition-all
+          ${loading || disabled 
+            ? 'bg-gray-400 cursor-not-allowed' 
+            : 'bg-[#2F674A] hover:bg-green-700 active:transform active:scale-95'
+          }
+          ${loading ? 'animate-pulse' : ''}
+        `}
+      >
+        {loading ? (
+          <div className="flex items-center justify-center gap-2">
+            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            Processing Payment...
+          </div>
+        ) : (
+          children || `Pay ₹${amount}`
+        )}
+      </button>
+    </>
+  );
+};
 
-export default RazorpayButton
+export default RazorpayButton;

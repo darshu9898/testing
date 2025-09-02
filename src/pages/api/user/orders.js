@@ -173,22 +173,21 @@ export default async function handler(req, res) {
         }
       }
 
-      // Calculate total amount
-      const orderAmount = cartItems.reduce((total, item) => {
+      // Calculate total amount (add taxes, shipping, etc.)
+      const subtotal = cartItems.reduce((total, item) => {
         return total + (item.product.productPrice * item.quantity)
       }, 0)
-      console.log(`💰 Calculated order amount: ${orderAmount}`)
+      
+      const shipping = subtotal > 499 ? 0 : 50
+      const tax = Math.round(subtotal * 0.18) // 18% GST
+      const codCharges = paymentMethod === 'cod' ? 25 : 0
+      const orderAmount = subtotal + shipping + tax + codCharges
+      
+      console.log(`💰 Order calculation:`, { subtotal, shipping, tax, codCharges, orderAmount })
 
-      // Create order with transaction
+      // Create order with transaction (but DON'T clear cart or update stock yet)
       const result = await prisma.$transaction(async (tx) => {
-        console.log('🚀 Starting transaction to create order...')
-
-        // Create order
-        console.log('➡️ Creating order with details:', cartItems.map(i => ({
-          productId: i.productId,
-          quantity: i.quantity,
-          unitPrice: i.product.productPrice
-        })))
+        console.log('🚀 Creating order (payment pending)...')
 
         const order = await tx.orders.create({
           data: {
@@ -196,14 +195,11 @@ export default async function handler(req, res) {
             orderAmount,
             orderDate: new Date(),
             orderDetails: {
-              create: cartItems.map((item, idx) => {
-                console.log(`📝 Creating orderDetail [${idx}] for product ${item.productId}`)
-                return {
-                  productId: item.productId,
-                  quantity: item.quantity,
-                  productPrice: item.product.productPrice
-                }
-              })
+              create: cartItems.map((item) => ({
+                productId: item.productId,
+                quantity: item.quantity,
+                productPrice: item.product.productPrice
+              }))
             }
           },
           include: {
@@ -212,27 +208,15 @@ export default async function handler(req, res) {
           }
         })
 
-        console.log('✅ Order inserted with ID:', order.orderId)
+        console.log('✅ Order created with ID:', order.orderId)
 
-        // Update product stock
-        for (const item of cartItems) {
-          console.log(`🔄 Updating stock for product ${item.productId}, decrement by ${item.quantity}`)
-          await tx.products.update({
-            where: { productId: item.productId },
-            data: { productStock: { decrement: item.quantity } }
-          })
-        }
-
-        // Clear user's cart
-        console.log(`🧹 Clearing cart for user ${userId}`)
-        await tx.cart.deleteMany({
-          where: { userId: parseInt(userId) }
-        })
+        // IMPORTANT: Don't clear cart or update stock yet - wait for payment confirmation
+        // This will be done in the payment verification API
 
         return order
       })
 
-      // Update user's shipping address if provided
+      // Update user's shipping address
       if (shippingAddress) {
         console.log(`📍 Updating shipping address for user ${userId}`)
         await prisma.users.update({
@@ -257,9 +241,10 @@ export default async function handler(req, res) {
             lineTotal: detail.productPrice * detail.quantity
           })),
           shippingAddress,
-          paymentMethod
+          paymentMethod,
+          status: 'pending_payment' // Order created but payment pending
         },
-        message: 'Order created successfully'
+        message: 'Order created successfully. Complete payment to confirm.'
       })
     }
 

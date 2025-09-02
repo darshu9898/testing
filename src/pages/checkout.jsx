@@ -225,17 +225,22 @@ export default function Checkout() {
   const handlePaymentSuccess = (paymentResult) => {
     console.log('Payment successful:', paymentResult);
     setProcessing(false);
+    setCurrentOrder(null); // Reset order state
     
     // Redirect to order confirmation with payment details
-    router.push(`/order-confirmation?orderId=${paymentResult.orderId}&paymentId=${paymentResult.paymentId}`);
+    router.push(`/order-confirmation?orderId=${paymentResult.orderId}&paymentId=${paymentResult.paymentId}&status=success`);
   };
 
   const handlePaymentFailure = (error) => {
     console.error('Payment failed:', error);
     setProcessing(false);
     
-    // Show error message and allow user to retry
-    alert('Payment failed. Please try again or choose a different payment method.');
+    // Show detailed error message
+    const errorMessage = error.error || error.message || 'Payment failed. Please try again.';
+    alert(`Payment Failed: ${errorMessage}`);
+    
+    // Reset current order so user can retry
+    setCurrentOrder(null);
   };
 
   // Calculate totals

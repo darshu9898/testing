@@ -67,29 +67,68 @@ export default async function handler(req, res) {
       });
     }
 
-    // Signature is valid, update payment record
-    const updatedPayment = await prisma.payments.updateMany({
-      where: {
-        razorpayOrderId: razorpay_order_id,
-        orderId: parseInt(orderId),
-        userId: parseInt(userId)
-      },
-      data: {
-        razorpayPaymentId: razorpay_payment_id,
-        paymentStatus: 'paid',
-        paymentDate: new Date()
+    // Payment signature is valid - now complete the order process
+    const result = await prisma.$transaction(async (tx) => {
+      console.log('🔄 Processing successful payment...');
+
+      // Update payment record
+      const updatedPayment = await tx.payments.updateMany({
+        where: {
+          razorpayOrderId: razorpay_order_id,
+          orderId: parseInt(orderId),
+          userId: parseInt(userId)
+        },
+        data: {
+          razorpayPaymentId: razorpay_payment_id,
+          paymentStatus: 'paid',
+          paymentDate: new Date()
+        }
+      });
+
+      if (updatedPayment.count === 0) {
+        throw new Error('Payment record not found or unauthorized access');
       }
+
+      // Get order details with products
+      const order = await tx.orders.findUnique({
+        where: { orderId: parseInt(orderId) },
+        include: {
+          orderDetails: {
+            include: { product: true }
+          }
+        }
+      });
+
+      if (!order) {
+        throw new Error('Order not found');
+      }
+
+      // Update product stock (deduct ordered quantities)
+      for (const detail of order.orderDetails) {
+        console.log(`📦 Updating stock for product ${detail.productId}, deduct ${detail.quantity}`);
+        
+        await tx.products.update({
+          where: { productId: detail.productId },
+          data: { 
+            productStock: { 
+              decrement: detail.quantity 
+            } 
+          }
+        });
+      }
+
+      // Clear user's cart (payment successful, order confirmed)
+      const deletedCart = await tx.cart.deleteMany({
+        where: { userId: parseInt(userId) }
+      });
+
+      console.log(`🧹 Cleared ${deletedCart.count} items from user's cart`);
+
+      return order;
     });
 
-    if (updatedPayment.count === 0) {
-      console.error('❌ Payment record not found or unauthorized');
-      return res.status(404).json({ 
-        error: 'Payment record not found or unauthorized access' 
-      });
-    }
-
-    // Fetch the updated order with payment details
-    const order = await prisma.orders.findUnique({
+    // Fetch complete order details for response
+    const completeOrder = await prisma.orders.findUnique({
       where: { orderId: parseInt(orderId) },
       include: {
         user: {
@@ -103,7 +142,8 @@ export default async function handler(req, res) {
             product: {
               select: {
                 productName: true,
-                productPrice: true
+                productPrice: true,
+                productImage: true
               }
             }
           }
@@ -116,36 +156,37 @@ export default async function handler(req, res) {
       }
     });
 
-    console.log('✅ Payment verified successfully:', {
+    console.log('✅ Payment verified and order completed:', {
       orderId,
       paymentId: razorpay_payment_id,
-      amount: order?.orderAmount
+      amount: completeOrder?.orderAmount
     });
 
     // Here you can add additional logic like:
     // - Send confirmation email
-    // - Update inventory
+    // - Send SMS notifications  
     // - Trigger order processing workflow
-    // - Send SMS notifications
 
     return res.status(200).json({
       success: true,
-      message: 'Payment verified successfully',
+      message: 'Payment verified and order confirmed successfully',
       paymentId: razorpay_payment_id,
       orderId: orderId,
       order: {
-        orderId: order.orderId,
-        orderAmount: order.orderAmount,
-        orderDate: order.orderDate,
-        customerName: order.user.userName,
-        customerEmail: order.user.userEmail,
-        items: order.orderDetails.map(detail => ({
+        orderId: completeOrder.orderId,
+        orderAmount: completeOrder.orderAmount,
+        orderDate: completeOrder.orderDate,
+        customerName: completeOrder.user.userName,
+        customerEmail: completeOrder.user.userEmail,
+        items: completeOrder.orderDetails.map(detail => ({
           productName: detail.product.productName,
+          productImage: detail.product.productImage,
           quantity: detail.quantity,
           price: detail.productPrice,
           total: detail.productPrice * detail.quantity
         })),
-        paymentDetails: order.payments[0]
+        paymentDetails: completeOrder.payments[0],
+        status: 'confirmed'
       }
     });
 
