@@ -448,7 +448,7 @@ export default function Profile() {
               </Card>
 
               {/* Recent Orders */}
-              {recentOrders.length > 0 && (
+              {/* {recentOrders.length > 0 && (
                 <Card className="bg-white mt-4">
                   <CardHeader>
                     <CardTitle className="text-lg text-black">Recent Orders</CardTitle>
@@ -489,7 +489,7 @@ export default function Profile() {
                     </div>
                   </CardContent>
                 </Card>
-              )}
+              )} */}
             </div>
 
             {/* Main Content Area */}

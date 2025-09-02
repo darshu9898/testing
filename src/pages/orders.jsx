@@ -12,31 +12,24 @@ export default function Orders() {
   const { user, loading: authLoading } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all'); // all, confirmed, pending, failed
+  const [filter, setFilter] = useState('all'); // all, paid, pending, failed
   const [sortBy, setSortBy] = useState('orderDate');
   const [sortOrder, setSortOrder] = useState('desc');
   const [page, setPage] = useState(1);
-  const [summary, setSummary] = useState(null);
 
   // Fetch orders
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams({
-        limit: '10',
-        offset: ((page - 1) * 10).toString(),
-        sortBy,
-        sortOrder
-      });
       
-      const response = await fetch(`/api/user/orders?${params}`, {
+      const response = await fetch('/api/user/orders', {
         credentials: 'include'
       });
       
       if (response.ok) {
         const data = await response.json();
+        console.log('Orders data:', data); // Debug log
         setOrders(data.orders || []);
-        setSummary(data.summary);
       } else if (response.status === 401) {
         router.push('/login');
       } else {
@@ -59,7 +52,7 @@ export default function Orders() {
         fetchOrders();
       }
     }
-  }, [user, authLoading, router, page, sortBy, sortOrder]);
+  }, [user, authLoading, router]);
 
   // View order details
   const viewOrderDetails = (orderId) => {
@@ -70,13 +63,18 @@ export default function Orders() {
   const reorderItems = async (orderId) => {
     try {
       // Get order details first
-      const response = await fetch(`/api/user/orders/${orderId}`, {
+      const response = await fetch(`/api/user/orders?orderId=${orderId}`, {
         credentials: 'include'
       });
       
       if (response.ok) {
         const data = await response.json();
-        const order = data.order;
+        const order = data.orders[0];
+        
+        if (!order || !order.items) {
+          alert('Order details not found');
+          return;
+        }
         
         // Add all items from the order to cart
         const addPromises = order.items.map(item => 
@@ -103,11 +101,13 @@ export default function Orders() {
     }
   };
 
-  // Get status color
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'confirmed':
+  // Get status color based on payment status
+  const getStatusColor = (paymentStatus) => {
+    switch (paymentStatus) {
+      case 'paid':
         return 'text-green-600 bg-green-100';
+      case 'pending_cod':
+        return 'text-blue-600 bg-blue-100';
       case 'pending':
         return 'text-yellow-600 bg-yellow-100';
       case 'failed':
@@ -117,11 +117,74 @@ export default function Orders() {
     }
   };
 
-  // Filter orders
+  // Get display status text
+  const getDisplayStatus = (paymentStatus) => {
+    switch (paymentStatus) {
+      case 'paid':
+        return 'Confirmed';
+      case 'pending_cod':
+        return 'COD Confirmed';
+      case 'pending':
+        return 'Pending Payment';
+      case 'failed':
+        return 'Payment Failed';
+      default:
+        return 'Unknown';
+    }
+  };
+
+  // Calculate summary from orders
+  const calculateSummary = (orders) => {
+    const totalOrders = orders.length;
+    const confirmedOrders = orders.filter(order => 
+      order.paymentStatus === 'paid' || order.paymentStatus === 'pending_cod'
+    ).length;
+    const pendingOrders = orders.filter(order => 
+      order.paymentStatus === 'pending'
+    ).length;
+    const failedOrders = orders.filter(order => 
+      order.paymentStatus === 'failed'
+    ).length;
+    const totalValue = orders
+      .filter(order => order.paymentStatus === 'paid' || order.paymentStatus === 'pending_cod')
+      .reduce((sum, order) => sum + order.orderAmount, 0);
+
+    return {
+      totalOrders,
+      confirmedOrders,
+      pendingOrders,
+      failedOrders,
+      totalValue
+    };
+  };
+
+  // Filter orders based on payment status
   const filteredOrders = orders.filter(order => {
     if (filter === 'all') return true;
-    return order.orderStatus === filter;
+    if (filter === 'confirmed') return order.paymentStatus === 'paid' || order.paymentStatus === 'pending_cod';
+    if (filter === 'pending') return order.paymentStatus === 'pending';
+    if (filter === 'failed') return order.paymentStatus === 'failed';
+    return true;
   });
+
+  // Sort orders
+  const sortedOrders = [...filteredOrders].sort((a, b) => {
+    let valueA = a[sortBy];
+    let valueB = b[sortBy];
+
+    if (sortBy === 'orderDate') {
+      valueA = new Date(valueA);
+      valueB = new Date(valueB);
+    }
+
+    if (sortOrder === 'asc') {
+      return valueA > valueB ? 1 : -1;
+    } else {
+      return valueA < valueB ? 1 : -1;
+    }
+  });
+
+  const summary = calculateSummary(orders);
 
   if (authLoading || loading) {
     return (
@@ -163,34 +226,32 @@ export default function Orders() {
 
         <div className="max-w-7xl mx-auto px-4 py-8">
           {/* Summary Cards */}
-          {summary && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-              <Card className="bg-white">
-                <CardContent className="p-6 text-center">
-                  <h3 className="text-2xl font-bold text-[#2F674A]">{summary.totalOrders}</h3>
-                  <p className="text-gray-600">Total Orders</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-white">
-                <CardContent className="p-6 text-center">
-                  <h3 className="text-2xl font-bold text-green-600">{summary.confirmedOrders}</h3>
-                  <p className="text-gray-600">Confirmed</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-white">
-                <CardContent className="p-6 text-center">
-                  <h3 className="text-2xl font-bold text-yellow-600">{summary.pendingOrders}</h3>
-                  <p className="text-gray-600">Pending</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-white">
-                <CardContent className="p-6 text-center">
-                  <h3 className="text-2xl font-bold text-[#2F674A]">₹{summary.totalValue}</h3>
-                  <p className="text-gray-600">Total Spent</p>
-                </CardContent>
-              </Card>
-            </div>
-          )}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <Card className="bg-white">
+              <CardContent className="p-6 text-center">
+                <h3 className="text-2xl font-bold text-[#2F674A]">{summary.totalOrders}</h3>
+                <p className="text-gray-600">Total Orders</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-white">
+              <CardContent className="p-6 text-center">
+                <h3 className="text-2xl font-bold text-green-600">{summary.confirmedOrders}</h3>
+                <p className="text-gray-600">Confirmed</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-white">
+              <CardContent className="p-6 text-center">
+                <h3 className="text-2xl font-bold text-yellow-600">{summary.pendingOrders}</h3>
+                <p className="text-gray-600">Pending</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-white">
+              <CardContent className="p-6 text-center">
+                <h3 className="text-2xl font-bold text-[#2F674A]">₹{summary.totalValue}</h3>
+                <p className="text-gray-600">Total Spent</p>
+              </CardContent>
+            </Card>
+          </div>
 
           {/* Filters and Sorting */}
           <Card className="bg-white mb-6">
@@ -211,7 +272,7 @@ export default function Orders() {
                       filter === 'confirmed' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
-                    Confirmed ({summary?.confirmedOrders || 0})
+                    Confirmed ({summary.confirmedOrders})
                   </button>
                   <button
                     onClick={() => setFilter('pending')}
@@ -219,7 +280,15 @@ export default function Orders() {
                       filter === 'pending' ? 'bg-yellow-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
-                    Pending ({summary?.pendingOrders || 0})
+                    Pending ({summary.pendingOrders})
+                  </button>
+                  <button
+                    onClick={() => setFilter('failed')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                      filter === 'failed' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Failed ({summary.failedOrders})
                   </button>
                 </div>
                 
@@ -245,7 +314,7 @@ export default function Orders() {
           </Card>
 
           {/* Orders List */}
-          {filteredOrders.length === 0 ? (
+          {sortedOrders.length === 0 ? (
             <Card className="bg-white">
               <CardContent className="p-12 text-center">
                 <div className="text-6xl mb-6">📦</div>
@@ -265,7 +334,7 @@ export default function Orders() {
             </Card>
           ) : (
             <div className="space-y-6">
-              {filteredOrders.map((order) => (
+              {sortedOrders.map((order) => (
                 <Card key={order.orderId} className="bg-white hover:shadow-lg transition-shadow">
                   <CardHeader>
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -282,8 +351,8 @@ export default function Orders() {
                         </CardDescription>
                       </div>
                       <div className="flex items-center gap-4">
-                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.orderStatus)}`}>
-                          {order.orderStatus.charAt(0).toUpperCase() + order.orderStatus.slice(1)}
+                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.paymentStatus)}`}>
+                          {getDisplayStatus(order.paymentStatus)}
                         </span>
                         <span className="text-xl font-bold text-[#2F674A]">₹{order.orderAmount}</span>
                       </div>
@@ -295,8 +364,8 @@ export default function Orders() {
                       <div>
                         <h4 className="font-semibold mb-3">Items ({order.totalItems})</h4>
                         <div className="space-y-3">
-                          {order.items.slice(0, 3).map((item) => (
-                            <div key={item.orderDetailId} className="flex items-center gap-3">
+                          {order.items && order.items.slice(0, 3).map((item, index) => (
+                            <div key={index} className="flex items-center gap-3">
                               <div className="relative w-12 h-12 flex-shrink-0">
                                 <Image
                                   src={getValidImageSrc(item.productImage)}
@@ -307,14 +376,14 @@ export default function Orders() {
                               </div>
                               <div className="flex-grow min-w-0">
                                 <p className="font-medium text-sm truncate">{item.productName}</p>
-                                <p className="text-xs text-gray-600">Qty: {item.quantity} × ₹{item.unitPrice}</p>
+                                <p className="text-xs text-gray-600">Qty: {item.quantity} × ₹{item.productPrice}</p>
                               </div>
                               <div className="text-right">
                                 <p className="font-semibold text-sm">₹{item.lineTotal}</p>
                               </div>
                             </div>
                           ))}
-                          {order.items.length > 3 && (
+                          {order.items && order.items.length > 3 && (
                             <p className="text-sm text-gray-600">
                               +{order.items.length - 3} more items
                             </p>
@@ -332,8 +401,12 @@ export default function Orders() {
                               order.paymentStatus === 'paid' ? 'text-green-600' : 
                               order.paymentStatus === 'failed' ? 'text-red-600' : 'text-yellow-600'
                             }`}>
-                              {order.paymentStatus.charAt(0).toUpperCase() + order.paymentStatus.slice(1)}
+                              {getDisplayStatus(order.paymentStatus)}
                             </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Payment Method:</span>
+                            <span>{order.paymentMode === 'cod' ? 'Cash on Delivery' : 'Online Payment'}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-gray-600">Items:</span>
@@ -363,7 +436,7 @@ export default function Orders() {
                             <ButtonDemo
                               label="Track Order"
                               bgColor="white"
-                              onClick={() => alert('Order tracking will be implemented soon')}
+                              onClick={() => router.push(`/track-order?id=${order.orderId}`)}
                             />
                           </div>
                         </div>
@@ -375,8 +448,6 @@ export default function Orders() {
             </div>
           )}
 
-          {/* Pagination would go here if needed */}
-          
           {/* Continue Shopping */}
           <div className="mt-12 text-center">
             <Card className="bg-[#F8F0E1] border-none">

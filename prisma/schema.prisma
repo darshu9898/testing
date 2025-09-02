@@ -45,6 +45,7 @@ model Orders {
   userId      Int
   orderAmount Int
   orderDate   DateTime
+  shippingAddress String?
 
   // Relations
   user         Users         @relation(fields: [userId], references: [userId])

@@ -41,7 +41,11 @@ export default async function handler(req, res) {
               paymentStatus: true,
               paymentDate: true,
               razorpayPaymentId: true
-            }
+            },
+            orderBy: {
+              paymentDate: 'desc'
+            },
+            take: 1 // Get only the latest payment
           }
         },
         orderBy: {
@@ -54,6 +58,7 @@ export default async function handler(req, res) {
         orderId: order.orderId,
         orderAmount: order.orderAmount,
         orderDate: order.orderDate,
+        shippingAddress: order.shippingAddress, // Include shipping address
         totalItems: order.orderDetails.length,
         paymentStatus: order.payments[0]?.paymentStatus || 'pending',
         paymentMode: order.payments[0]?.paymentMode || 'unknown',
@@ -112,12 +117,13 @@ export default async function handler(req, res) {
 
       // Use transaction for order creation
       const result = await prisma.$transaction(async (tx) => {
-        // Create order with order details
+        // Create order with order details and shipping address
         const order = await tx.orders.create({
           data: {
             userId: parseInt(userId),
             orderAmount: orderAmount,
             orderDate: new Date(),
+            shippingAddress: shippingAddress, // Add shipping address to order
             orderDetails: {
               create: cartItems.map(item => ({
                 productId: item.productId,
@@ -162,7 +168,7 @@ export default async function handler(req, res) {
 
           // Update product stock for COD orders
           for (const item of cartItems) {
-            await tx.products.update({
+            const updatedProduct = await tx.products.update({
               where: { productId: item.productId },
               data: { 
                 productStock: { 
@@ -170,7 +176,7 @@ export default async function handler(req, res) {
                 } 
               }
             });
-            console.log(`📉 Reduced stock for product ${item.productId} by ${item.quantity}`);
+            console.log(`📉 Reduced stock for product ${item.productId}: ${updatedProduct.productStock + item.quantity} -> ${updatedProduct.productStock}`);
           }
 
           // Clear user's cart for COD orders
@@ -179,6 +185,9 @@ export default async function handler(req, res) {
           });
           console.log(`🧹 Cleared ${deletedCartItems.count} items from cart`);
         }
+        
+        // For non-COD orders, DON'T update stock or clear cart yet
+        // This will be done in the payment verification step
 
         return order;
       });
@@ -231,6 +240,11 @@ export default async function handler(req, res) {
     // Handle foreign key constraint errors
     if (error.code === 'P2003') {
       return res.status(400).json({ error: 'Invalid reference in order data' });
+    }
+
+    // Handle insufficient stock errors (if they occur at DB level)
+    if (error.message && error.message.includes('stock')) {
+      return res.status(400).json({ error: 'Insufficient stock for one or more items' });
     }
     
     return res.status(500).json({ 
