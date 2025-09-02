@@ -28,7 +28,9 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Order ID is required' });
     }
 
-    // Fetch the order from database
+    console.log('🔍 Fetching order details for ID:', orderId);
+
+    // Fetch the order from database with all necessary details
     const order = await prisma.orders.findUnique({
       where: { orderId: parseInt(orderId) },
       include: {
@@ -42,20 +44,33 @@ export default async function handler(req, res) {
         },
         orderDetails: {
           include: {
-            product: true
+            product: {
+              select: {
+                productName: true,
+                productPrice: true
+              }
+            }
           }
         }
       }
     });
 
     if (!order) {
+      console.error('❌ Order not found:', orderId);
       return res.status(404).json({ error: 'Order not found' });
     }
 
     // Verify order belongs to the authenticated user
     if (order.userId !== parseInt(userId)) {
+      console.error('❌ Unauthorized access to order:', orderId, 'by user:', userId);
       return res.status(403).json({ error: 'Unauthorized access to order' });
     }
+
+    console.log('✅ Order found:', {
+      orderId: order.orderId,
+      amount: order.orderAmount,
+      userId: order.userId
+    });
 
     // Check if payment already exists for this order
     const existingPayment = await prisma.payments.findFirst({
@@ -72,6 +87,8 @@ export default async function handler(req, res) {
       razorpayOrderId = existingPayment.razorpayOrderId;
       console.log('📝 Using existing Razorpay order:', razorpayOrderId);
     } else {
+      console.log('🆕 Creating new Razorpay order...');
+
       // Create new Razorpay order
       const razorpayOrder = await razorpay.orders.create({
         amount: order.orderAmount * 100, // Amount in paisa
@@ -88,29 +105,25 @@ export default async function handler(req, res) {
       razorpayOrderId = razorpayOrder.id;
       console.log('✅ Created new Razorpay order:', razorpayOrderId);
 
-      // Create or update payment record
-      await prisma.payments.upsert({
-        where: {
-          orderId: parseInt(orderId)
-        },
-        create: {
+      // Create payment record
+      await prisma.payments.create({
+        data: {
           userId: parseInt(userId),
           orderId: parseInt(orderId),
           razorpayOrderId: razorpayOrderId,
           paymentMode: 'razorpay',
           paymentStatus: 'created',
-          paymentAmount: order.orderAmount
-        },
-        update: {
-          razorpayOrderId: razorpayOrderId,
-          paymentStatus: 'created',
+          paymentAmount: order.orderAmount,
           paymentDate: new Date()
         }
       });
+
+      console.log('💾 Payment record created in database');
     }
 
     // Prepare response data for frontend
     const responseData = {
+      success: true,
       razorpayOrderId: razorpayOrderId,
       amount: order.orderAmount,
       currency: 'INR',
@@ -127,7 +140,7 @@ export default async function handler(req, res) {
           price: detail.productPrice
         }))
       },
-      shippingAddress: shippingAddress || order.user.userAddress
+      shippingAddress: shippingAddress || ''
     };
 
     console.log('📦 Order prepared for payment:', {
@@ -136,10 +149,7 @@ export default async function handler(req, res) {
       amount: order.orderAmount
     });
 
-    return res.status(200).json({
-      success: true,
-      ...responseData
-    });
+    return res.status(200).json(responseData);
 
   } catch (error) {
     console.error('💥 Create order error:', error);
@@ -147,9 +157,19 @@ export default async function handler(req, res) {
     // Handle Razorpay specific errors
     if (error.error) {
       const razorpayError = error.error;
+      console.error('💥 Razorpay API error:', razorpayError);
       return res.status(400).json({
         error: 'Payment gateway error',
         details: razorpayError.description || razorpayError.reason || 'Unknown payment error'
+      });
+    }
+
+    // Handle Prisma database errors
+    if (error.code) {
+      console.error('💥 Database error:', error.code, error.message);
+      return res.status(500).json({
+        error: 'Database error',
+        details: process.env.NODE_ENV === 'development' ? error.message : 'Database operation failed'
       });
     }
 

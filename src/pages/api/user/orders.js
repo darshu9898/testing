@@ -1,201 +1,125 @@
 // src/pages/api/user/orders.js
-import { getContext } from '@/lib/getContext'
-import prisma from '@/lib/prisma'
+import { getContext } from '@/lib/getContext';
+import prisma from '@/lib/prisma';
 
 export default async function handler(req, res) {
-  console.log(`📥 User orders request: ${req.method} ${req.url}`)
-  
   try {
-    const { userId, user, isAuthenticated } = await getContext(req, res)
-    console.log('👤 Auth context:', { isAuthenticated, userId, user })
+    const { userId, isAuthenticated } = await getContext(req, res);
 
     if (!isAuthenticated || !userId) {
-      return res.status(401).json({ error: 'Authentication required' })
+      return res.status(401).json({ error: 'Authentication required' });
     }
 
-    // ============== GET: Fetch User's Orders ==============
+    // GET: Fetch user orders
     if (req.method === 'GET') {
-      const { 
-        orderId, 
-        status, 
-        limit = 20, 
-        offset = 0,
-        sortBy = 'orderDate',
-        sortOrder = 'desc'
-      } = req.query
+      const { orderId } = req.query;
 
-      console.log('🔍 Fetching orders for user:', userId, { orderId, status, limit, offset, sortBy, sortOrder })
-
-      // Build where clause
-      const where = { userId: parseInt(userId) }
-      if (orderId) where.orderId = parseInt(orderId, 10)
-
-      // Build orderBy clause
-      const validSortFields = ['orderDate', 'orderAmount', 'orderId']
-      const sortField = validSortFields.includes(sortBy) ? sortBy : 'orderDate'
-      const orderBy = { [sortField]: sortOrder === 'asc' ? 'asc' : 'desc' }
-
-      console.log('⚙️ Prisma query params:', { where, orderBy })
+      let whereClause = { userId: parseInt(userId) };
+      
+      // If specific order requested
+      if (orderId) {
+        whereClause.orderId = parseInt(orderId);
+      }
 
       const orders = await prisma.orders.findMany({
-        where,
+        where: whereClause,
         include: {
-          user: {
-            select: {
-              userId: true,
-              userName: true,
-              userEmail: true,
-              userAddress: true
-            }
-          },
           orderDetails: {
             include: {
               product: {
                 select: {
-                  productId: true,
                   productName: true,
-                  productPrice: true,
                   productImage: true,
-                  productDescription: true
+                  productPrice: true
                 }
               }
-            },
-            orderBy: { orderDetailId: 'asc' }
+            }
           },
           payments: {
-            orderBy: { paymentDate: 'desc' }
+            select: {
+              paymentMode: true,
+              paymentStatus: true,
+              paymentDate: true,
+              razorpayPaymentId: true
+            }
           }
         },
-        orderBy,
-        take: Math.min(parseInt(limit, 10), 50), // Max 50 orders per request
-        skip: parseInt(offset, 10) || 0
-      })
-
-      console.log(`📊 Found ${orders.length} orders for user ${userId}`)
-
-      // Transform data with summary info
-      const ordersWithSummary = orders.map(order => {
-        const totalItems = order.orderDetails.reduce((sum, detail) => sum + detail.quantity, 0)
-        const lastPayment = order.payments.length > 0 ? order.payments[0] : null
-        const paymentStatus = lastPayment?.paymentStatus || 'pending'
-
-        // Calculate order status based on payment
-        let orderStatus = 'pending'
-        if (paymentStatus === 'paid' || paymentStatus === 'completed') {
-          orderStatus = 'confirmed'
-        } else if (paymentStatus === 'failed' || paymentStatus === 'cancelled') {
-          orderStatus = 'failed'
+        orderBy: {
+          orderDate: 'desc'
         }
+      });
 
-        return {
-          orderId: order.orderId,
-          orderAmount: order.orderAmount,
-          orderDate: order.orderDate,
-          totalItems,
-          orderStatus,
-          paymentStatus,
-          items: order.orderDetails.map(detail => ({
-            orderDetailId: detail.orderDetailId,
-            productId: detail.productId,
-            productName: detail.product.productName,
-            productImage: detail.product.productImage,
-            productDescription: detail.product.productDescription,
-            quantity: detail.quantity,
-            unitPrice: detail.productPrice,
-            lineTotal: detail.productPrice * detail.quantity
-          })),
-          payments: order.payments.map(payment => ({
-            paymentId: payment.paymentId,
-            razorpayOrderId: payment.razorpayOrderId,
-            razorpayPaymentId: payment.razorpayPaymentId,
-            paymentMode: payment.paymentMode,
-            paymentStatus: payment.paymentStatus,
-            paymentAmount: payment.paymentAmount,
-            paymentDate: payment.paymentDate
-          })),
-          shippingAddress: order.user.userAddress
-        }
-      })
+      // Format orders for frontend
+      const formattedOrders = orders.map(order => ({
+        orderId: order.orderId,
+        orderAmount: order.orderAmount,
+        orderDate: order.orderDate,
+        totalItems: order.orderDetails.length,
+        paymentStatus: order.payments[0]?.paymentStatus || 'pending',
+        paymentMode: order.payments[0]?.paymentMode || 'unknown',
+        items: order.orderDetails.map(detail => ({
+          productName: detail.product.productName,
+          productImage: detail.product.productImage,
+          quantity: detail.quantity,
+          productPrice: detail.productPrice,
+          lineTotal: detail.productPrice * detail.quantity
+        }))
+      }));
 
-      // Get total count for pagination
-      const totalOrders = await prisma.orders.count({ where })
-      console.log(`📦 Total orders count for user ${userId}:`, totalOrders)
-
-      // Calculate summary statistics
-      const summary = {
-        totalOrders,
-        totalValue: ordersWithSummary.reduce((sum, order) => sum + order.orderAmount, 0),
-        confirmedOrders: ordersWithSummary.filter(o => o.orderStatus === 'confirmed').length,
-        pendingOrders: ordersWithSummary.filter(o => o.orderStatus === 'pending').length,
-        failedOrders: ordersWithSummary.filter(o => o.orderStatus === 'failed').length
-      }
-
-      return res.status(200).json({
-        success: true,
-        orders: ordersWithSummary,
-        summary,
-        pagination: {
-          currentPage: Math.floor(parseInt(offset) / parseInt(limit)) + 1,
-          totalPages: Math.ceil(totalOrders / parseInt(limit)),
-          totalItems: totalOrders,
-          itemsPerPage: parseInt(limit)
-        }
-      })
+      return res.status(200).json({ orders: formattedOrders });
     }
 
-    // ============== POST: Create New Order (from Cart) ==============
+    // POST: Create new order
     if (req.method === 'POST') {
-      const { shippingAddress, paymentMethod = 'razorpay' } = req.body
-      console.log('🛒 Create order request body:', { shippingAddress, paymentMethod })
+      const { shippingAddress, paymentMethod } = req.body;
 
       if (!shippingAddress) {
-        return res.status(400).json({ error: 'Shipping address is required' })
+        return res.status(400).json({ error: 'Shipping address is required' });
       }
 
-      // Get user's cart items
+      console.log('🛒 Creating order for user:', userId, 'Payment method:', paymentMethod);
+
+      // Get user's cart items with validation
       const cartItems = await prisma.cart.findMany({
         where: { userId: parseInt(userId) },
         include: { product: true }
-      })
-      console.log(`🛒 Found ${cartItems.length} cart items for user ${userId}`)
+      });
 
       if (cartItems.length === 0) {
-        return res.status(400).json({ error: 'Cart is empty' })
+        return res.status(400).json({ error: 'Cart is empty' });
       }
 
-      // Check stock availability
+      console.log('📦 Found cart items:', cartItems.length);
+
+      // Validate stock availability before creating order
       for (const item of cartItems) {
-        console.log(`📦 Checking stock for product ${item.productId}: requested ${item.quantity}, available ${item.product.productStock}`)
+        if (!item.product) {
+          return res.status(400).json({ error: `Product not found for cart item ${item.cartId}` });
+        }
         if (item.quantity > item.product.productStock) {
           return res.status(400).json({ 
             error: `Insufficient stock for ${item.product.productName}. Only ${item.product.productStock} available.` 
-          })
+          });
         }
       }
 
-      // Calculate total amount (add taxes, shipping, etc.)
-      const subtotal = cartItems.reduce((total, item) => {
-        return total + (item.product.productPrice * item.quantity)
-      }, 0)
-      
-      const shipping = subtotal > 499 ? 0 : 50
-      const tax = Math.round(subtotal * 0.18) // 18% GST
-      const codCharges = paymentMethod === 'cod' ? 25 : 0
-      const orderAmount = subtotal + shipping + tax + codCharges
-      
-      console.log(`💰 Order calculation:`, { subtotal, shipping, tax, codCharges, orderAmount })
+      // Calculate total amount
+      const orderAmount = cartItems.reduce((total, item) => {
+        return total + (item.product.productPrice * item.quantity);
+      }, 0);
 
-      // Create order with transaction (but DON'T clear cart or update stock yet)
+      console.log('💰 Order amount calculated:', orderAmount);
+
+      // Use transaction for order creation
       const result = await prisma.$transaction(async (tx) => {
-        console.log('🚀 Creating order (payment pending)...')
-
+        // Create order with order details
         const order = await tx.orders.create({
           data: {
             userId: parseInt(userId),
-            orderAmount,
+            orderAmount: orderAmount,
             orderDate: new Date(),
             orderDetails: {
-              create: cartItems.map((item) => ({
+              create: cartItems.map(item => ({
                 productId: item.productId,
                 quantity: item.quantity,
                 productPrice: item.product.productPrice
@@ -203,64 +127,115 @@ export default async function handler(req, res) {
             }
           },
           include: {
-            orderDetails: { include: { product: true } },
-            user: { select: { userName: true, userEmail: true } }
+            orderDetails: {
+              include: {
+                product: {
+                  select: {
+                    productName: true,
+                    productImage: true,
+                    productPrice: true
+                  }
+                }
+              }
+            }
           }
-        })
+        });
 
-        console.log('✅ Order created with ID:', order.orderId)
+        console.log('✅ Order created with ID:', order.orderId);
 
-        // IMPORTANT: Don't clear cart or update stock yet - wait for payment confirmation
-        // This will be done in the payment verification API
+        // Handle COD orders - complete the process immediately
+        if (paymentMethod === 'cod') {
+          console.log('💰 Processing COD order...');
 
-        return order
-      })
+          // Create COD payment record
+          await tx.payments.create({
+            data: {
+              userId: parseInt(userId),
+              orderId: order.orderId,
+              razorpayOrderId: `cod_${order.orderId}_${Date.now()}`,
+              paymentMode: 'cod',
+              paymentStatus: 'pending_cod', // COD orders are pending until delivery
+              paymentAmount: orderAmount,
+              paymentDate: new Date()
+            }
+          });
 
-      // Update user's shipping address
-      if (shippingAddress) {
-        console.log(`📍 Updating shipping address for user ${userId}`)
-        await prisma.users.update({
-          where: { userId: parseInt(userId) },
-          data: { userAddress: shippingAddress }
-        })
-      }
+          // Update product stock for COD orders
+          for (const item of cartItems) {
+            await tx.products.update({
+              where: { productId: item.productId },
+              data: { 
+                productStock: { 
+                  decrement: item.quantity 
+                } 
+              }
+            });
+            console.log(`📉 Reduced stock for product ${item.productId} by ${item.quantity}`);
+          }
 
-      console.log(`✅ Order created successfully for user ${userId}: Order #${result.orderId}`)
+          // Clear user's cart for COD orders
+          const deletedCartItems = await tx.cart.deleteMany({
+            where: { userId: parseInt(userId) }
+          });
+          console.log(`🧹 Cleared ${deletedCartItems.count} items from cart`);
+        }
 
-      return res.status(201).json({
-        success: true,
-        order: {
-          orderId: result.orderId,
-          orderAmount: result.orderAmount,
-          orderDate: result.orderDate,
-          items: result.orderDetails.map(detail => ({
-            productId: detail.productId,
-            productName: detail.product.productName,
-            quantity: detail.quantity,
-            unitPrice: detail.productPrice,
-            lineTotal: detail.productPrice * detail.quantity
-          })),
-          shippingAddress,
-          paymentMethod,
-          status: 'pending_payment' // Order created but payment pending
-        },
-        message: 'Order created successfully. Complete payment to confirm.'
-      })
+        return order;
+      });
+
+      // Prepare order response
+      const orderResponse = {
+        orderId: result.orderId,
+        orderAmount: result.orderAmount,
+        orderDate: result.orderDate,
+        shippingAddress: shippingAddress,
+        paymentMethod: paymentMethod,
+        items: result.orderDetails.map(detail => ({
+          productName: detail.product.productName,
+          productImage: detail.product.productImage,
+          quantity: detail.quantity,
+          productPrice: detail.productPrice,
+          lineTotal: detail.productPrice * detail.quantity
+        })),
+        totalItems: result.orderDetails.length,
+        status: paymentMethod === 'cod' ? 'confirmed_cod' : 'pending_payment'
+      };
+
+      const successMessage = paymentMethod === 'cod' 
+        ? 'COD order created and confirmed successfully!' 
+        : 'Order created successfully. Proceed with payment.';
+
+      console.log(`✅ ${successMessage} Order ID: ${result.orderId}`);
+
+      return res.status(201).json({ 
+        success: true, 
+        order: orderResponse,
+        message: successMessage
+      });
     }
 
-    return res.status(405).json({ error: 'Method not allowed' })
+    return res.status(405).json({ error: 'Method not allowed' });
 
   } catch (error) {
-    console.error('💥 User orders error (detailed):', {
-      name: error.name,
-      code: error.code,
-      meta: error.meta,
-      message: error.message,
-      stack: error.stack
-    })
+    console.error('💥 Orders API Error:', error);
+    
+    // Handle specific Prisma errors
+    if (error.code === 'P2002') {
+      return res.status(400).json({ error: 'Duplicate order detected' });
+    }
+    
+    if (error.code === 'P2025') {
+      return res.status(404).json({ error: 'Referenced record not found' });
+    }
+
+    // Handle foreign key constraint errors
+    if (error.code === 'P2003') {
+      return res.status(400).json({ error: 'Invalid reference in order data' });
+    }
+    
     return res.status(500).json({ 
-      error: 'Internal server error',
-      message: error.message
-    })
+      error: 'Failed to create order',
+      details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
   }
 }

@@ -30,6 +30,8 @@ export default async function handler(req, res) {
       });
     }
 
+    console.log('🔐 Verifying signature for payment:', razorpay_payment_id);
+
     // Generate expected signature
     const body = razorpay_order_id + '|' + razorpay_payment_id;
     const expectedSignature = crypto
@@ -75,8 +77,7 @@ export default async function handler(req, res) {
       const updatedPayment = await tx.payments.updateMany({
         where: {
           razorpayOrderId: razorpay_order_id,
-          orderId: parseInt(orderId),
-          userId: parseInt(userId)
+          orderId: parseInt(orderId)
         },
         data: {
           razorpayPaymentId: razorpay_payment_id,
@@ -86,8 +87,10 @@ export default async function handler(req, res) {
       });
 
       if (updatedPayment.count === 0) {
-        throw new Error('Payment record not found or unauthorized access');
+        throw new Error('Payment record not found or no updates made');
       }
+
+      console.log('✅ Payment record updated successfully');
 
       // Get order details with products
       const order = await tx.orders.findUnique({
@@ -95,12 +98,23 @@ export default async function handler(req, res) {
         include: {
           orderDetails: {
             include: { product: true }
+          },
+          user: {
+            select: {
+              userId: true,
+              userName: true,
+              userEmail: true
+            }
           }
         }
       });
 
       if (!order) {
         throw new Error('Order not found');
+      }
+
+      if (order.userId !== parseInt(userId)) {
+        throw new Error('Unauthorized: Order does not belong to user');
       }
 
       // Update product stock (deduct ordered quantities)
@@ -161,11 +175,6 @@ export default async function handler(req, res) {
       paymentId: razorpay_payment_id,
       amount: completeOrder?.orderAmount
     });
-
-    // Here you can add additional logic like:
-    // - Send confirmation email
-    // - Send SMS notifications  
-    // - Trigger order processing workflow
 
     return res.status(200).json({
       success: true,
