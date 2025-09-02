@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/hooks/useAuth';
+import { getValidImageSrc } from '@/lib/imageHelper';
 
 export default function Orders() {
   const router = useRouter();
@@ -298,7 +299,7 @@ export default function Orders() {
                             <div key={item.orderDetailId} className="flex items-center gap-3">
                               <div className="relative w-12 h-12 flex-shrink-0">
                                 <Image
-                                  src={item.productImage || '/product.png'}
+                                  src={getValidImageSrc(item.productImage)}
                                   alt={item.productName}
                                   fill
                                   className="object-cover rounded-lg"
