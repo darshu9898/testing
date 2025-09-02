@@ -220,7 +220,7 @@ export default function Navbar() {
           {/* Logo */}
           <div className="flex items-center">
             <Image
-              src="/logo.jpg"   // make sure it's in public/
+              src="/logonew.jpg"   // make sure it's in public/
               alt="Trivedam Logo"
               width={40}
               height={40}
@@ -254,24 +254,23 @@ export default function Navbar() {
           <div className="flex justify-between items-center h-16">
             {/* Logo */}
             <div className="flex items-center">
-            <Link href="/" className="flex items-center space-x-2 group">
-              <div className="bg-gradient-to-r from-[#2F674A] to-[#1F5132] p-2 rounded-lg group-hover:scale-105 transition-transform duration-200 flex items-center justify-center">
+              <Link href="/" className="flex items-center space-x-2 group">
                 <Image
-                  src="/logo.jpg" // make sure logo.png is in your /public folder
+                  src="/logonew.png"   // place logo.png inside public/
                   alt="Trivedam Logo"
-                  width={32}
-                  height={32}
+                  width={40}
+                  height={60}
                   className="object-contain"
                 />
-              </div>
-              <div>
-                <span className="text-2xl font-bold text-[#2F674A] group-hover:text-[#1F5132] transition-colors">
-                  Trivedam
-                </span>
-                <div className="text-xs text-gray-500 -mt-1">Ayurvedic Wellness</div>
-              </div>
-            </Link>
-          </div>
+                <div>
+                  <span className="text-2xl font-bold text-[#2F674A] group-hover:text-[#1F5132] transition-colors">
+                    Trivedam
+                  </span>
+                  <div className="text-xs text-gray-500 -mt-1">Ayurvedic Wellness</div>
+                </div>
+              </Link>
+            </div>
+
 
             {/* Desktop Navigation */}
             <div className="hidden lg:flex items-center space-x-8">
