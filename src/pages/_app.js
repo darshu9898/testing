@@ -1,5 +1,6 @@
 import "@/styles/globals.css";
 import Navbar from "@/components/NavBar";
+import Footer from "@/components/Footer"; // ✅ Import Footer
 import { AuthProvider } from "@/hooks/useAuth";
 import { CartProvider } from "@/contexts/CartContext";
 import { motion, AnimatePresence } from "framer-motion";
@@ -14,7 +15,6 @@ export default function App({ Component, pageProps }) {
     setIsMounted(true);
   }, []);
 
-  // Don't render anything until mounted to prevent hydration issues
   if (!isMounted) {
     return null;
   }
@@ -22,7 +22,6 @@ export default function App({ Component, pageProps }) {
   return (
     <AuthProvider>
       <CartProvider>
-        {/* Navbar must be inside CartProvider to access cart context */}
         <Navbar />
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
@@ -31,9 +30,10 @@ export default function App({ Component, pageProps }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.15 }}
-            className="min-h-screen bg-white"
+            className="min-h-screen bg-white flex flex-col"
           >
             <Component {...pageProps} />
+            <Footer /> {/* ✅ Footer inside motion container */}
           </motion.div>
         </AnimatePresence>
       </CartProvider>
