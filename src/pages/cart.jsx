@@ -333,7 +333,7 @@ export default function Cart() {
                       )}
                       <div className="flex justify-between">
                         <span className="text-gray-600">Shipping</span>
-                        <span className={shipping === 0 ? "text-green-600 font-bold" : "font-bold"}>
+                        <span className={shipping === 0 ? "text-green-600 font-bold" : "text-[#2F674A] font-bold"}>
                           {shipping === 0 ? "FREE" : `₹${shipping}`}
                         </span>
                       </div>
@@ -344,7 +344,7 @@ export default function Cart() {
                       )}
                       <div className="border-t pt-2 flex justify-between text-lg font-bold text-gray-900">
                         <span>Total</span>
-                        <span className="text-[#2F674A] text-gray-900">₹{Math.round(total)}</span>
+                        <span className="text-[#2F674A]">₹{Math.round(total)}</span>
                       </div>
                     </div>
 
@@ -391,7 +391,7 @@ export default function Cart() {
           {/* Recommended Products */}
           <div className="mt-16">
             <h2 className="text-2xl font-bold mb-8 text-black">You Might Also Like</h2>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-black">
               {[
                 { id: 1, name: "Neem Face Wash", price: 149, image: "/product.png" },
                 { id: 2, name: "Triphala Powder", price: 189, image: "/combo.jpg" },

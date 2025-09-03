@@ -6,10 +6,10 @@ import useEmblaCarousel from "embla-carousel-react";
 
 export function MyCarousel() {
   const images = [
-    '/combo.jpg',
-    '/product.png',
-    '/combo.jpg',
-    '/combo.jpg',
+    '/libidopro.jpg',
+    '/ayurvedicpowder.jpg',
+    '/ayurvedicoil.jpg',
+    '/combo2.jpg',
     '/combo.jpg',
   ];
 

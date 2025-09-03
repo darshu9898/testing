@@ -17,10 +17,10 @@ export default function Footer() {
             <h3 className="text-xl font-semibold mb-3">Contact</h3>
             <p>
               <a href="tel:+919876543210" className="hover:text-gray-300 block">
-                📞 +91 98765 43210
+                📞 +91 9821045611
               </a>
               <a href="mailto:support@libidopro.com" className="hover:text-gray-300 block">
-                ✉ support@libidopro.com
+                ✉ support@trivedamayurveda.com
               </a>
             </p>
           </div>
@@ -60,7 +60,7 @@ export default function Footer() {
 
       {/* Bottom Copyright */}
       <div className="text-center text-sm mt-8 opacity-80">
-        © {new Date().getFullYear()} Libido-Pro Max. All rights reserved.
+        © {new Date().getFullYear()} Trivedam. All rights reserved.
       </div>
     </footer>
   );

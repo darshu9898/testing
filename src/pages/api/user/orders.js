@@ -7,6 +7,7 @@ export default async function handler(req, res) {
   
   try {
     const { userId, user, isAuthenticated } = await getContext(req, res)
+    console.log('👤 Auth context:', { isAuthenticated, userId, user })
 
     if (!isAuthenticated || !userId) {
       return res.status(401).json({ error: 'Authentication required' })
@@ -23,7 +24,7 @@ export default async function handler(req, res) {
         sortOrder = 'desc'
       } = req.query
 
-      console.log('🔍 Fetching orders for user:', userId, { orderId, status, limit })
+      console.log('🔍 Fetching orders for user:', userId, { orderId, status, limit, offset, sortBy, sortOrder })
 
       // Build where clause
       const where = { userId: parseInt(userId) }
@@ -33,6 +34,8 @@ export default async function handler(req, res) {
       const validSortFields = ['orderDate', 'orderAmount', 'orderId']
       const sortField = validSortFields.includes(sortBy) ? sortBy : 'orderDate'
       const orderBy = { [sortField]: sortOrder === 'asc' ? 'asc' : 'desc' }
+
+      console.log('⚙️ Prisma query params:', { where, orderBy })
 
       const orders = await prisma.orders.findMany({
         where,
@@ -67,6 +70,8 @@ export default async function handler(req, res) {
         take: Math.min(parseInt(limit, 10), 50), // Max 50 orders per request
         skip: parseInt(offset, 10) || 0
       })
+
+      console.log(`📊 Found ${orders.length} orders for user ${userId}`)
 
       // Transform data with summary info
       const ordersWithSummary = orders.map(order => {
@@ -114,6 +119,7 @@ export default async function handler(req, res) {
 
       // Get total count for pagination
       const totalOrders = await prisma.orders.count({ where })
+      console.log(`📦 Total orders count for user ${userId}:`, totalOrders)
 
       // Calculate summary statistics
       const summary = {
@@ -123,8 +129,6 @@ export default async function handler(req, res) {
         pendingOrders: ordersWithSummary.filter(o => o.orderStatus === 'pending').length,
         failedOrders: ordersWithSummary.filter(o => o.orderStatus === 'failed').length
       }
-
-      console.log(`📊 Found ${orders.length} orders for user ${userId}`)
 
       return res.status(200).json({
         success: true,
@@ -142,6 +146,7 @@ export default async function handler(req, res) {
     // ============== POST: Create New Order (from Cart) ==============
     if (req.method === 'POST') {
       const { shippingAddress, paymentMethod = 'razorpay' } = req.body
+      console.log('🛒 Create order request body:', { shippingAddress, paymentMethod })
 
       if (!shippingAddress) {
         return res.status(400).json({ error: 'Shipping address is required' })
@@ -152,6 +157,7 @@ export default async function handler(req, res) {
         where: { userId: parseInt(userId) },
         include: { product: true }
       })
+      console.log(`🛒 Found ${cartItems.length} cart items for user ${userId}`)
 
       if (cartItems.length === 0) {
         return res.status(400).json({ error: 'Cart is empty' })
@@ -159,6 +165,7 @@ export default async function handler(req, res) {
 
       // Check stock availability
       for (const item of cartItems) {
+        console.log(`📦 Checking stock for product ${item.productId}: requested ${item.quantity}, available ${item.product.productStock}`)
         if (item.quantity > item.product.productStock) {
           return res.status(400).json({ 
             error: `Insufficient stock for ${item.product.productName}. Only ${item.product.productStock} available.` 
@@ -170,21 +177,33 @@ export default async function handler(req, res) {
       const orderAmount = cartItems.reduce((total, item) => {
         return total + (item.product.productPrice * item.quantity)
       }, 0)
+      console.log(`💰 Calculated order amount: ${orderAmount}`)
 
       // Create order with transaction
       const result = await prisma.$transaction(async (tx) => {
+        console.log('🚀 Starting transaction to create order...')
+
         // Create order
+        console.log('➡️ Creating order with details:', cartItems.map(i => ({
+          productId: i.productId,
+          quantity: i.quantity,
+          unitPrice: i.product.productPrice
+        })))
+
         const order = await tx.orders.create({
           data: {
             userId: parseInt(userId),
             orderAmount,
             orderDate: new Date(),
             orderDetails: {
-              create: cartItems.map(item => ({
-                productId: item.productId,
-                quantity: item.quantity,
-                productPrice: item.product.productPrice
-              }))
+              create: cartItems.map((item, idx) => {
+                console.log(`📝 Creating orderDetail [${idx}] for product ${item.productId}`)
+                return {
+                  productId: item.productId,
+                  quantity: item.quantity,
+                  productPrice: item.product.productPrice
+                }
+              })
             }
           },
           include: {
@@ -193,8 +212,11 @@ export default async function handler(req, res) {
           }
         })
 
+        console.log('✅ Order inserted with ID:', order.orderId)
+
         // Update product stock
         for (const item of cartItems) {
+          console.log(`🔄 Updating stock for product ${item.productId}, decrement by ${item.quantity}`)
           await tx.products.update({
             where: { productId: item.productId },
             data: { productStock: { decrement: item.quantity } }
@@ -202,6 +224,7 @@ export default async function handler(req, res) {
         }
 
         // Clear user's cart
+        console.log(`🧹 Clearing cart for user ${userId}`)
         await tx.cart.deleteMany({
           where: { userId: parseInt(userId) }
         })
@@ -211,6 +234,7 @@ export default async function handler(req, res) {
 
       // Update user's shipping address if provided
       if (shippingAddress) {
+        console.log(`📍 Updating shipping address for user ${userId}`)
         await prisma.users.update({
           where: { userId: parseInt(userId) },
           data: { userAddress: shippingAddress }
@@ -242,7 +266,13 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' })
 
   } catch (error) {
-    console.error('💥 User orders error:', error)
+    console.error('💥 User orders error (detailed):', {
+      name: error.name,
+      code: error.code,
+      meta: error.meta,
+      message: error.message,
+      stack: error.stack
+    })
     return res.status(500).json({ 
       error: 'Internal server error',
       message: error.message

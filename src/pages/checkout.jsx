@@ -1,4 +1,5 @@
 import { ButtonDemo } from '@/components/Button';
+import RazorpayButton from '@/components/RazorpayButton';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Head from 'next/head';
 import Image from 'next/image';
@@ -8,7 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 
 export default function Checkout() {
   const router = useRouter();
-    const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   
   // State management
   const [cartItems, setCartItems] = useState([]);
@@ -20,6 +21,7 @@ export default function Checkout() {
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [promoCode, setPromoCode] = useState('');
   const [discount, setDiscount] = useState(0);
+  const [currentOrder, setCurrentOrder] = useState(null);
   
   // Address form state
   const [newAddress, setNewAddress] = useState({
@@ -146,6 +148,39 @@ export default function Checkout() {
     }
   };
 
+  const createOrder = async () => {
+    if (!selectedAddressId) {
+      alert('Please select a delivery address');
+      return null;
+    }
+
+    try {
+      const selectedAddress = addresses.find(addr => addr.addressId === selectedAddressId);
+      const fullAddress = `${selectedAddress.addressLine1}, ${selectedAddress.addressLine2 ? selectedAddress.addressLine2 + ', ' : ''}${selectedAddress.city}, ${selectedAddress.state} - ${selectedAddress.postalCode}`;
+      
+      const response = await fetch('/api/user/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          shippingAddress: fullAddress,
+          paymentMethod: paymentMethod
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.order;
+      } else {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create order');
+      }
+    } catch (error) {
+      console.error('Create order error:', error);
+      throw error;
+    }
+  };
+
   const handlePlaceOrder = async () => {
     if (!selectedAddressId) {
       alert('Please select a delivery address');
@@ -160,42 +195,47 @@ export default function Checkout() {
     setProcessing(true);
 
     try {
-      const selectedAddress = addresses.find(addr => addr.addressId === selectedAddressId);
-      
-      const response = await fetch('/api/user/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          shippingAddress: selectedAddress.fullAddress,
-          paymentMethod: paymentMethod
-        })
-      });
+      // Create order first
+      const order = await createOrder();
+      setCurrentOrder(order);
 
-      if (response.ok) {
-        const data = await response.json();
-        
-        // Simulate payment process based on method
-        if (paymentMethod === 'cod') {
-          // Cash on delivery - direct success
-          router.push(`/order-confirmation?orderId=${data.order.orderId}&payment=cod`);
-        } else if (paymentMethod === 'razorpay') {
-          // Redirect to payment gateway simulation
-          router.push(`/payment?orderId=${data.order.orderId}&amount=${Math.round(finalTotal)}`);
-        } else {
-          // Other payment methods
-          alert(`Payment with ${paymentMethod} will be implemented soon!`);
-        }
+      if (paymentMethod === 'cod') {
+        // Cash on delivery - direct success
+        router.push(`/order-confirmation?orderId=${order.orderId}&payment=cod`);
+      } else if (paymentMethod === 'razorpay') {
+        // For Razorpay, we'll let the RazorpayButton handle the payment
+        // Order is created and stored in currentOrder state
+        // The payment will be initiated when user clicks the Razorpay button
+        console.log('Order created for Razorpay payment:', order.orderId);
       } else {
-        const error = await response.json();
-        alert(error.error || 'Failed to place order');
+        // Other payment methods
+        alert(`Payment with ${paymentMethod} will be implemented soon!`);
       }
     } catch (error) {
       console.error('Place order error:', error);
-      alert('Failed to place order. Please try again.');
+      alert(error.message || 'Failed to place order. Please try again.');
     } finally {
-      setProcessing(false);
+      if (paymentMethod !== 'razorpay') {
+        setProcessing(false);
+      }
+      // For Razorpay, keep processing true until payment completes
     }
+  };
+
+  const handlePaymentSuccess = (paymentResult) => {
+    console.log('Payment successful:', paymentResult);
+    setProcessing(false);
+    
+    // Redirect to order confirmation with payment details
+    router.push(`/order-confirmation?orderId=${paymentResult.orderId}&paymentId=${paymentResult.paymentId}`);
+  };
+
+  const handlePaymentFailure = (error) => {
+    console.error('Payment failed:', error);
+    setProcessing(false);
+    
+    // Show error message and allow user to retry
+    alert('Payment failed. Please try again or choose a different payment method.');
   };
 
   // Calculate totals
@@ -230,6 +270,9 @@ export default function Checkout() {
       </>
     );
   }
+
+  // Get selected address for payment
+  const selectedAddress = addresses.find(addr => addr.addressId === selectedAddressId);
 
   return (
     <>
@@ -344,7 +387,7 @@ export default function Checkout() {
               <Card className="bg-white">
                 <CardHeader>
                   <CardTitle className="text-xl text-black flex items-center gap-2">
-                    <span>🏠</span> Delivering to {user.user_metadata.full_name}
+                    <span>🏠</span> Delivering to {user?.user_metadata?.full_name || 'Customer'}
                   </CardTitle>
                   <CardDescription className="text-gray-700">
                     Choose where you want your order delivered
@@ -389,7 +432,11 @@ export default function Checkout() {
                                   </span>
                                 )}
                               </div>
-                              <p className="text-gray-600 text-sm">{address.fullAddress}</p>
+                              <p className="text-gray-600 text-sm">{address.addressLine1}</p>
+                              {address.addressLine2 && (
+                                <p className="text-gray-600 text-sm">{address.addressLine2}</p>
+                              )}
+                              <p className="text-gray-600 text-sm">{address.city}, {address.state} - {address.postalCode}</p>
                               {address.phoneNumber && (
                                 <p className="text-gray-600 text-sm">Phone: {address.phoneNumber}</p>
                               )}
@@ -610,154 +657,181 @@ export default function Checkout() {
 
             {/* Order Total Sidebar */}
             <div className="lg:col-span-1">
-              <div className="sticky top-8 space-y-4"></div>
-              <Card className="bg-white relative z-10">
-                <CardHeader>
-                  <CardTitle className="text-xl text-black">Order Total</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Price Breakdown */}
-                  <div className="space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Subtotal ({cartItems.length} items)</span>
-                      <span className="font-medium text-gray-900">₹{subtotal}</span>
-                    </div>
-                    
-                    {discount > 0 && (
-                      <div className="flex justify-between text-green-600">
-                        <span>Discount ({discount}%)</span>
-                        <span>-₹{Math.round(discountAmount)}</span>
-                      </div>
-                    )}
-                    
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Shipping</span>
-                      <span className={shipping === 0 ? "text-green-600 font-medium" : "font-medium"}>
-                        {shipping === 0 ? "FREE" : `₹${shipping}`}
-                      </span>
-                    </div>
-
-                    {paymentMethod === 'cod' && (
+              <div className="sticky top-8 space-y-4">
+                <Card className="bg-white relative z-10">
+                  <CardHeader>
+                    <CardTitle className="text-xl text-black">Order Total</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Price Breakdown */}
+                    <div className="space-y-3">
                       <div className="flex justify-between">
-                        <span className="text-gray-600">COD Charges</span>
-                        <span className="font-medium">₹25</span>
+                        <span className="text-gray-600">Subtotal ({cartItems.length} items)</span>
+                        <span className="font-medium text-gray-900">₹{subtotal}</span>
                       </div>
-                    )}
-                    
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Tax (GST 18%)</span>
-                      <span className="font-medium text-gray-900">₹{tax}</span>
-                    </div>
-                    
-                    <div className="border-t pt-2 flex justify-between text-lg font-bold text-gray-900">
-                      <span>Total Amount</span>
-                      <span className="text-[#2F674A]">
-                        ₹{Math.round(finalTotal + (paymentMethod === 'cod' ? 25 : 0))}
-                      </span>
-                    </div>
-                  </div>
+                      
+                      {discount > 0 && (
+                        <div className="flex justify-between text-green-600">
+                          <span>Discount ({discount}%)</span>
+                          <span>-₹{Math.round(discountAmount)}</span>
+                        </div>
+                      )}
+                      
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Shipping</span>
+                        <span className={shipping === 0 ? "text-green-600 font-medium" : "font-medium"}>
+                          {shipping === 0 ? "FREE" : `₹${shipping}`}
+                        </span>
+                      </div>
 
-                  {/* Place Order Button */}
-                  <div className="pt-4">
-                    <ButtonDemo
-                      label={processing ? "Processing..." : "Place Order"}
-                      bgColor="green"
-                      onClick={handlePlaceOrder}
-                      disabled={processing || !selectedAddressId}
-                    />
-                  </div>
+                      {paymentMethod === 'cod' && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">COD Charges</span>
+                          <span className="font-medium">₹25</span>
+                        </div>
+                      )}
+                      
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Tax (GST 18%)</span>
+                        <span className="font-medium text-gray-900">₹{tax}</span>
+                      </div>
+                      
+                      <div className="border-t pt-2 flex justify-between text-lg font-bold text-gray-900">
+                        <span>Total Amount</span>
+                        <span className="text-[#2F674A]">
+                          ₹{Math.round(finalTotal + (paymentMethod === 'cod' ? 25 : 0))}
+                        </span>
+                      </div>
+                    </div>
 
-                  {/* Security & Policy Info */}
-                  <div className="pt-4 border-t text-center">
-                    <div className="text-sm text-gray-600 space-y-2">
-                      <p className="flex items-center justify-center gap-2">
-                        <span>🔒</span> 256-bit SSL Encrypted
+                    {/* Place Order Button */}
+                    <div className="pt-4">
+                      {!currentOrder ? (
+                        <ButtonDemo
+                          label={processing ? "Creating Order..." : "Create Order"}
+                          bgColor="green"
+                          onClick={handlePlaceOrder}
+                          disabled={processing || !selectedAddressId}
+                        />
+                      ) : paymentMethod === 'razorpay' ? (
+                        <RazorpayButton
+                          orderId={currentOrder.orderId}
+                          amount={Math.round(finalTotal)}
+                          customerDetails={{
+                            name: user?.user_metadata?.full_name || user?.email || 'Customer',
+                            email: user?.email || '',
+                            contact: user?.user_metadata?.phone_number || ''
+                          }}
+                          shippingAddress={selectedAddress ? 
+                            `${selectedAddress.addressLine1}, ${selectedAddress.addressLine2 ? selectedAddress.addressLine2 + ', ' : ''}${selectedAddress.city}, ${selectedAddress.state} - ${selectedAddress.postalCode}` 
+                            : ''
+                          }
+                          onSuccess={handlePaymentSuccess}
+                          onFailure={handlePaymentFailure}
+                          disabled={processing}
+                        >
+                          {processing ? "Processing Payment..." : `Pay ₹${Math.round(finalTotal)}`}
+                        </RazorpayButton>
+                      ) : (
+                        <div className="text-center">
+                          <div className="text-green-600 text-lg font-bold mb-2">✅ Order Created!</div>
+                          <p className="text-sm text-gray-600">Redirecting to confirmation...</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Security & Policy Info */}
+                    <div className="pt-4 border-t text-center">
+                      <div className="text-sm text-gray-600 space-y-2">
+                        <p className="flex items-center justify-center gap-2">
+                          <span>🔒</span> 256-bit SSL Encrypted
+                        </p>
+                        <p className="flex items-center justify-center gap-2">
+                          <span>🛡️</span> PCI DSS Compliant
+                        </p>
+                        <p className="flex items-center justify-center gap-2">
+                          <span>↩️</span> 30-day Return Policy
+                        </p>
+                        <p className="text-xs text-gray-500 mt-3">
+                          By placing this order, you agree to our Terms of Service and Privacy Policy
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Estimated Delivery */}
+                    <div className="bg-green-50 p-3 rounded-lg">
+                      <h4 className="font-medium text-green-800 mb-1">Estimated Delivery</h4>
+                      <p className="text-sm text-green-700">
+                        {new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toLocaleDateString('en-IN', {
+                          weekday: 'long',
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        })}
                       </p>
-                      <p className="flex items-center justify-center gap-2">
-                        <span>🛡️</span> PCI DSS Compliant
-                      </p>
-                      <p className="flex items-center justify-center gap-2">
-                        <span>↩️</span> 30-day Return Policy
-                      </p>
-                      <p className="text-xs text-gray-500 mt-3">
-                        By placing this order, you agree to our Terms of Service and Privacy Policy
-                      </p>
+                      <p className="text-xs text-green-600 mt-1">5-7 business days</p>
                     </div>
-                  </div>
+                  </CardContent>
+                </Card>
 
-                  {/* Estimated Delivery */}
-                  <div className="bg-green-50 p-3 rounded-lg">
-                    <h4 className="font-medium text-green-800 mb-1">Estimated Delivery</h4>
-                    <p className="text-sm text-green-700">
-                      {new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toLocaleDateString('en-IN', {
-                        weekday: 'long',
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
-                      })}
-                    </p>
-                    <p className="text-xs text-green-600 mt-1">5-7 business days</p>
-                  </div>
-                </CardContent>
-              </Card>
+                {/* Customer Support */}
+                <Card className="bg-white mt-4">
+                  <CardHeader>
+                    <CardTitle className="text-lg text-black">Need Help?</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
+                      <span className="text-2xl">📞</span>
+                      <div>
+                        <p className="font-medium text-black">Call Us</p>
+                        <p className="text-sm text-blue-600">+91 98765 43210</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
+                      <span className="text-2xl">💬</span>
+                      <div>
+                        <p className="font-medium text-black">Live Chat</p>
+                        <p className="text-sm text-green-600">Available 9 AM - 9 PM</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 p-3 bg-purple-50 rounded-lg">
+                      <span className="text-2xl">📧</span>
+                      <div>
+                        <p className="font-medium text-black">Email Support</p>
+                        <p className="text-sm text-purple-600">help@trivedam.com</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
 
-              {/* Customer Support */}
-              <Card className="bg-white mt-4">
-                <CardHeader>
-                  <CardTitle className="text-lg text-black">Need Help?</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
-                    <span className="text-2xl">📞</span>
-                    <div>
-                      <p className="font-medium text-black">Call Us</p>
-                      <p className="text-sm text-blue-600">+91 98765 43210</p>
+                {/* Trust Badges */}
+                <Card className="bg-white mt-4">
+                  <CardContent className="p-4">
+                    <div className="grid grid-cols-2 gap-4 text-center">
+                      <div>
+                        <div className="text-2xl mb-1">🏆</div>
+                        <p className="text-xs text-gray-600">5000+</p>
+                        <p className="text-xs text-gray-600">Happy Customers</p>
+                      </div>
+                      <div>
+                        <div className="text-2xl mb-1">⭐</div>
+                        <p className="text-xs text-gray-600">4.8/5</p>
+                        <p className="text-xs text-gray-600">Customer Rating</p>
+                      </div>
+                      <div>
+                        <div className="text-2xl mb-1">🚚</div>
+                        <p className="text-xs text-gray-600">Free</p>
+                        <p className="text-xs text-gray-600">Shipping ₹499+</p>
+                      </div>
+                      <div>
+                        <div className="text-2xl mb-1">🌿</div>
+                        <p className="text-xs text-gray-600">100%</p>
+                        <p className="text-xs text-gray-600">Natural</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
-                    <span className="text-2xl">💬</span>
-                    <div>
-                      <p className="font-medium text-black">Live Chat</p>
-                      <p className="text-sm text-green-600">Available 9 AM - 9 PM</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 p-3 bg-purple-50 rounded-lg">
-                    <span className="text-2xl">📧</span>
-                    <div>
-                      <p className="font-medium text-black">Email Support</p>
-                      <p className="text-sm text-purple-600">help@trivedam.com</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Trust Badges */}
-              <Card className="bg-white mt-4">
-                <CardContent className="p-4">
-                  <div className="grid grid-cols-2 gap-4 text-center">
-                    <div>
-                      <div className="text-2xl mb-1">🏆</div>
-                      <p className="text-xs text-gray-600">5000+</p>
-                      <p className="text-xs text-gray-600">Happy Customers</p>
-                    </div>
-                    <div>
-                      <div className="text-2xl mb-1">⭐</div>
-                      <p className="text-xs text-gray-600">4.8/5</p>
-                      <p className="text-xs text-gray-600">Customer Rating</p>
-                    </div>
-                    <div>
-                      <div className="text-2xl mb-1">🚚</div>
-                      <p className="text-xs text-gray-600">Free</p>
-                      <p className="text-xs text-gray-600">Shipping ₹499+</p>
-                    </div>
-                    <div>
-                      <div className="text-2xl mb-1">🌿</div>
-                      <p className="text-xs text-gray-600">100%</p>
-                      <p className="text-xs text-gray-600">Natural</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           </div>
         </div>

@@ -1,6 +1,7 @@
 // src/pages/api/admin/orders.js
 import prisma from '@/lib/prisma'
 import { requireAdminAuth } from '@/lib/adminAuth'
+import { convertBigInts, safeJsonStringify } from '@/lib/bigIntUtils'
 
 export default async function handler(req, res) {
   console.log(`📥 Admin orders request: ${req.method} ${req.url}`)
@@ -67,7 +68,7 @@ export default async function handler(req, res) {
 
     console.log(`📊 Found ${orders.length} orders`)
 
-    // Transform data to include useful summary info
+    // Transform data to include useful summary info with BigInt handling
     const orderSummary = orders.map(order => {
       const totalItems = order.orderDetails.reduce((sum, detail) => sum + detail.quantity, 0)
       const lastPayment = order.payments.length > 0 ? order.payments[0] : null
@@ -75,26 +76,29 @@ export default async function handler(req, res) {
       
       // Calculate expected total from order details (for verification)
       const calculatedTotal = order.orderDetails.reduce((sum, detail) => {
-        return sum + (detail.productPrice * detail.quantity)
+        return sum + (Number(detail.productPrice || 0) * detail.quantity)
       }, 0)
 
       return {
         orderId: order.orderId,
         userId: order.userId,
-        orderAmount: order.orderAmount,
+        orderAmount: Number(order.orderAmount || 0),
         calculatedTotal, // For debugging price discrepancies
         totalItems,
         orderDate: order.orderDate,
         paymentStatus,
-        user: order.user,
+        user: {
+          ...order.user,
+          userPhone: order.user?.userPhone ? order.user.userPhone.toString() : null
+        },
         items: order.orderDetails.map(detail => ({
           orderDetailId: detail.orderDetailId,
           productId: detail.productId,
           productName: detail.product.productName,
           productImage: detail.product.productImage,
           quantity: detail.quantity,
-          unitPrice: detail.productPrice,
-          lineTotal: detail.productPrice * detail.quantity
+          unitPrice: Number(detail.productPrice || 0),
+          lineTotal: Number(detail.productPrice || 0) * detail.quantity
         })),
         payments: order.payments.map(payment => ({
           paymentId: payment.paymentId,
@@ -102,18 +106,18 @@ export default async function handler(req, res) {
           razorpayPaymentId: payment.razorpayPaymentId,
           paymentMode: payment.paymentMode,
           paymentStatus: payment.paymentStatus,
-          paymentAmount: payment.paymentAmount,
+          paymentAmount: Number(payment.paymentAmount || 0),
           paymentDate: payment.paymentDate
         })),
         // Summary flags for quick filtering
         isPaid: paymentStatus === 'paid' || paymentStatus === 'completed',
         isPending: paymentStatus === 'pending',
         isFailed: paymentStatus === 'failed' || paymentStatus === 'cancelled',
-        hasDiscrepancy: Math.abs(order.orderAmount - calculatedTotal) > 0.01
+        hasDiscrepancy: Math.abs(Number(order.orderAmount || 0) - calculatedTotal) > 0.01
       }
     })
 
-    // Calculate summary statistics
+    // Calculate summary statistics with BigInt handling
     const summary = {
       totalOrders: orderSummary.length,
       totalValue: orderSummary.reduce((sum, order) => sum + order.orderAmount, 0),
@@ -127,18 +131,35 @@ export default async function handler(req, res) {
     console.log('✅ Orders data processed successfully')
     console.log('📈 Summary:', summary)
 
-    return res.status(200).json({
+    // Prepare response with BigInt conversion
+    const responseData = {
       success: true,
       summary,
       orders: orderSummary,
       filters: { userId, orderId, status, limit }
-    })
+    }
+
+    // Deep convert any remaining BigInts and send response
+    const safeResponseData = convertBigInts(responseData)
+    const jsonString = safeJsonStringify(safeResponseData)
+
+    return res
+      .status(200)
+      .setHeader('Content-Type', 'application/json')
+      .send(jsonString)
 
   } catch (error) {
     console.error('💥 Admin orders error:', error)
-    return res.status(500).json({ 
+    
+    const errorResponse = { 
       error: 'Internal server error',
       message: error.message
-    })
+    }
+    
+    const jsonString = safeJsonStringify(errorResponse)
+    return res
+      .status(500)
+      .setHeader('Content-Type', 'application/json')
+      .send(jsonString)
   }
 }

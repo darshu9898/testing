@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { useAuth } from "@/hooks/useAuth";
 import { useCartCount } from "@/contexts/CartContext";
+import Image from "next/image";
 import {
   ShoppingCart,
   Menu,
@@ -218,15 +219,19 @@ export default function Navbar() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center">
-            <div className="bg-gradient-to-r from-[#2F674A] to-[#1F5132] p-2 rounded-lg">
-              <span className="text-white font-bold text-xl">T</span>
-            </div>
+            <Image
+              src="/logo2.png"   // make sure it's in public/
+              alt="Trivedam Logo"
+              width={40}
+              height={40}
+              className="object-contain"
+            />
             <div className="ml-2">
               <span className="text-2xl font-bold text-[#2F674A]">Trivedam</span>
               <div className="text-xs text-gray-500 -mt-1">Ayurvedic Wellness</div>
             </div>
           </div>
-          
+
           {/* Loading state */}
           <div className="flex items-center space-x-4">
             <div className="animate-pulse bg-gray-200 h-8 w-8 rounded-full"></div>
@@ -250,9 +255,13 @@ export default function Navbar() {
             {/* Logo */}
             <div className="flex items-center">
               <Link href="/" className="flex items-center space-x-2 group">
-                <div className="bg-gradient-to-r from-[#2F674A] to-[#1F5132] p-2 rounded-lg group-hover:scale-105 transition-transform duration-200">
-                  <span className="text-white font-bold text-xl">T</span>
-                </div>
+                <Image
+                  src="/logo2.png"   // place logo.png inside public/
+                  alt="Trivedam Logo"
+                  width={40}
+                  height={60}
+                  className="object-contain"
+                />
                 <div>
                   <span className="text-2xl font-bold text-[#2F674A] group-hover:text-[#1F5132] transition-colors">
                     Trivedam
@@ -261,6 +270,7 @@ export default function Navbar() {
                 </div>
               </Link>
             </div>
+
 
             {/* Desktop Navigation */}
             <div className="hidden lg:flex items-center space-x-8">
