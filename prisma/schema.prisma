@@ -12,17 +12,21 @@ model Users {
   userId       Int       @id @default(autoincrement())
   supabaseId   String?   @unique
   userName     String
-  userEmail    String   @unique
+  userEmail    String    @unique
   userPhone    BigInt?
   userAddress  String?
   created_at   DateTime  @default(now())
 
   // Relations
-  orders   Orders[]
-  cart     Cart[]
-  payments Payments[]
-  reviews  Reviews[]
-  addresses UserAddresses []
+  orders    Orders[]
+  cart      Cart[]
+  payments  Payments[]
+  reviews   Reviews[]
+  addresses UserAddresses[]
+
+  // Add indexes for common queries
+  @@index([userEmail])
+  @@index([created_at])
 }
 
 model Products {
@@ -38,32 +42,48 @@ model Products {
   cart         Cart[]
   orderDetails OrderDetails[]
   reviews      Reviews[]
+
+  // Add indexes for common queries
+  @@index([productPrice])
+  @@index([productStock])
+  @@index([created_at])
+  @@index([productName]) // For search functionality
 }
 
 model Orders {
-  orderId     Int           @id @default(autoincrement())
-  userId      Int
-  orderAmount Int
-  orderDate   DateTime
+  orderId         Int           @id @default(autoincrement())
+  userId          Int
+  orderAmount     Int
+  orderDate       DateTime
   shippingAddress String?
 
   // Relations
   user         Users         @relation(fields: [userId], references: [userId])
   orderDetails OrderDetails[]
   payments     Payments[]
+
+  // CRITICAL: Add index on foreign key
+  @@index([userId])
+  @@index([orderDate])
+  @@index([userId, orderDate]) // Composite index for user's order history
 }
 
 model Cart {
-  cartId          Int       @id @default(autoincrement())
-  productId       Int
-  userId          Int?
-  sessionId       String? // For guests carts (set via cookies)
-  quantity        Int
+  cartId      Int       @id @default(autoincrement())
+  productId   Int
+  userId      Int?
+  sessionId   String?   // For guests carts (set via cookies)
+  quantity    Int
 
   // Relations
   user    Users?    @relation(fields: [userId], references: [userId])
   product Products @relation(fields: [productId], references: [productId])
 
+  // CRITICAL: Add indexes on foreign keys
+  @@index([userId])
+  @@index([productId])
+  @@index([sessionId])
+  
   @@unique([userId, productId], map: "unique_user_cart_item")
   @@unique([sessionId, productId], map: "unique_guest_cart_item")
 }
@@ -78,6 +98,10 @@ model OrderDetails {
   // Relations
   order   Orders   @relation(fields: [orderId], references: [orderId])
   product Products @relation(fields: [productId], references: [productId])
+
+  // CRITICAL: Add indexes on foreign keys
+  @@index([orderId])
+  @@index([productId])
 }
 
 model Reviews {
@@ -85,31 +109,49 @@ model Reviews {
   userId    Int
   productId Int
   review    String
+  rating    Int?      // Consider adding rating field
+  created_at DateTime @default(now())
 
   // Relations
   user    Users    @relation(fields: [userId], references: [userId])
   product Products @relation(fields: [productId], references: [productId])
+
+  // CRITICAL: Add indexes on foreign keys
+  @@index([userId])
+  @@index([productId])
+  @@index([productId, rating]) // For product rating queries
+  @@index([created_at])
 }
 
 model Payments {
   paymentId         Int       @id @default(autoincrement())
   userId            Int
   orderId           Int
-  razorpayOrderId   String
-  razorpayPaymentId String?  // Filled after payment is successful
+  razorpayOrderId   String    @unique
+  razorpayPaymentId String?   // Filled after payment is successful
   paymentMode       String
   paymentStatus     String
-  paymentDate       DateTime @default(now())
+  paymentDate       DateTime  @default(now())
   paymentAmount     Int
 
   // Relations
   user  Users  @relation(fields: [userId], references: [userId])
   order Orders @relation(fields: [orderId], references: [orderId])
+
+  // CRITICAL: Add indexes on foreign keys
+  @@index([userId])
+  @@index([orderId])
+  @@index([paymentStatus])
+  @@index([paymentDate])
+  @@index([razorpayOrderId])
 }
 
 model Category {
   categoryId   Int    @id @default(autoincrement())
-  categoryName String
+  categoryName String @unique
+  
+  // Add index for category searches
+  @@index([categoryName])
 }
 
 model AdminSessions {
@@ -121,6 +163,7 @@ model AdminSessions {
 
   @@index([expires_at])
   @@index([last_access])
+  @@index([token]) // Already indexed due to @unique, but explicit for clarity
   @@map("admin_sessions")
 }
 
@@ -144,5 +187,6 @@ model UserAddresses {
 
   @@index([userId])
   @@index([isDefault])
+  @@index([city, state]) // For location-based queries
   @@unique([userId, addressLabel], map: "unique_user_address_label")
 }
