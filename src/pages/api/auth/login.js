@@ -7,7 +7,7 @@ export default async function handler(req, res) {
 
   // Add CSRF protection
   const origin = req.headers.origin
-  const allowedOrigins = [process.env.NEXT_PUBLIC_SITE_URL, 'http://localhost:3000','https://www.trivedamayurveda.com/','https://vercel.com/darshitas-projects-59fc0df4/ayurveda-tier1/7F93jc92ZKmLPfzH9M2X5s92SHtG']
+  const allowedOrigins = [process.env.NEXT_PUBLIC_SITE_URL, 'http://localhost:3000','https://www.trivedamayurveda.com/','https://vercel.com/darshitas-projects-59fc0df4/ayurveda-tier1/7F93jc92ZKmLPfzH9M2X5s92SHtG','https://www.trivedamayurveda.com']
   
   if (!allowedOrigins.includes(origin)) {
     return res.status(403).json({ error: 'Forbidden origin' })
