@@ -1,3 +1,4 @@
+export const runtime = "nodejs";
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import { getOrSetSessionId } from './lib/session'
