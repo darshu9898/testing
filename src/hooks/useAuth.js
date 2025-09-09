@@ -238,7 +238,7 @@ export const AuthProvider = ({ children }) => {
     try {
       console.log('🚀 AuthProvider: Starting sign up for:', email)
       
-      const response = await fetch('/api/auth/register', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, fullName }),
