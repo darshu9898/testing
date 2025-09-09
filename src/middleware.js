@@ -6,26 +6,24 @@ import { getOrSetSessionId } from './lib/session';
 
 export async function middleware(req) {
   const res = NextResponse.next();
-
-  // Ensure session cookie exists (your custom function)
   getOrSetSessionId(req, res);
 
-  // Create Supabase SSR client
+  // ✅ Correct Supabase SSR client usage
   const supabase = createServerClient(
-    { req, res }, // ⚠ must pass req/res
+    { req, res }, // ⚠ Must pass req/res
     process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_KEY
+    process.env.SUPABASE_SERVICE_KEY // Use server-side key
   );
 
   const { pathname } = req.nextUrl;
 
-  // Skip static files
+  // Skip middleware for static files
   if (pathname.match(/\.[a-zA-Z0-9]{1,6}$/)) return res;
 
   // Skip admin orders page
   if (pathname === '/admin/orders.html') return res;
 
-  // Fetch session safely
+  // Session checking with error handling
   let session = null;
   try {
     const { data: { session: currentSession }, error } = await supabase.auth.getSession();
@@ -44,7 +42,7 @@ export async function middleware(req) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  // Auth routes (redirect if logged in)
+  // Auth routes
   const authRoutes = ['/login', '/register'];
   if (authRoutes.some(route => pathname.startsWith(route)) && session) {
     try {
@@ -55,7 +53,7 @@ export async function middleware(req) {
       }
     } catch (err) {
       console.error('Middleware user fetch error:', err);
-      // Allow access to auth routes if error occurs
+      // Allow access if error occurs
     }
   }
 
