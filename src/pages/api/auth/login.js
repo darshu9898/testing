@@ -7,7 +7,7 @@ export default async function handler(req, res) {
 
   // Add CSRF protection
   const origin = req.headers.origin
-  const allowedOrigins = [process.env.NEXT_PUBLIC_SITE_URL, 'http://localhost:3000']
+  const allowedOrigins = [process.env.NEXT_PUBLIC_SITE_URL, 'http://localhost:3000','https://www.trivedamayurveda.com/']
   
   if (!allowedOrigins.includes(origin)) {
     return res.status(403).json({ error: 'Forbidden origin' })
