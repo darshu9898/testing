@@ -389,7 +389,7 @@ export default function Cart() {
           </div>
 
           {/* Recommended Products */}
-          <div className="mt-16">
+          {/* <div className="mt-16">
             <h2 className="text-2xl font-bold mb-8 text-black">You Might Also Like</h2>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-black">
               {[
@@ -424,8 +424,8 @@ export default function Cart() {
                   </CardContent>
                 </Card>
               ))}
-            </div>
-          </div>
+            </div> */}
+          {/* </div> */}
         </div>
       </div>
     </>
