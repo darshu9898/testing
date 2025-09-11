@@ -1,4 +1,4 @@
-// src/contexts/CartContext.js - Optimized cart context with immediate state updates
+// src/contexts/CartContext.js - Ultra-optimized with smart debouncing and caching
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 
@@ -10,40 +10,61 @@ export const CartProvider = ({ children }) => {
     items: [],
     count: 0,
     total: 0,
-    loading: true,
+    loading: false, // Start as false, not true
     error: null,
     lastFetch: null
   })
 
-  // Refs for preventing unnecessary re-fetches
+  // Refs for preventing unnecessary re-fetches and tracking state
   const fetchingRef = useRef(false)
   const lastUserIdRef = useRef(null)
   const retryTimeoutRef = useRef(null)
+  const debounceTimeoutRef = useRef(null)
+  const abortControllerRef = useRef(null)
 
   const { user, isAuthenticated } = useAuth()
 
-  // Memoized selectors to prevent unnecessary re-renders
+  // Memoized selectors - only recalculate when needed
   const cartCount = useMemo(() => cartState.count, [cartState.count])
   const cartItems = useMemo(() => cartState.items, [cartState.items])
   const cartTotal = useMemo(() => cartState.total, [cartState.total])
   const cartLoading = useMemo(() => cartState.loading, [cartState.loading])
   const cartError = useMemo(() => cartState.error, [cartState.error])
 
-  // Optimized state updater to prevent unnecessary re-renders
+  // Optimized state updater with deep comparison prevention
   const updateCartState = useCallback((updates) => {
     setCartState(prev => {
-      const newState = { ...prev, ...updates }
+      // Check if anything actually changed before updating
+      let hasChanges = false
+      for (const key in updates) {
+        if (prev[key] !== updates[key]) {
+          // For arrays and objects, do shallow comparison
+          if (Array.isArray(prev[key]) && Array.isArray(updates[key])) {
+            if (prev[key].length !== updates[key].length) {
+              hasChanges = true
+              break
+            }
+            // Quick length + first item check for performance
+            if (prev[key].length > 0 && prev[key][0] !== updates[key][0]) {
+              hasChanges = true
+              break
+            }
+          } else {
+            hasChanges = true
+            break
+          }
+        }
+      }
       
-      // Only update if something actually changed
-      if (JSON.stringify(prev) === JSON.stringify(newState)) {
+      if (!hasChanges) {
         return prev
       }
       
-      return newState
+      return { ...prev, ...updates }
     })
   }, [])
 
-  // Debounced cart fetch to prevent rapid API calls
+  // Ultra-optimized fetch with smart caching and request deduplication
   const fetchCart = useCallback(async (force = false) => {
     // Prevent multiple simultaneous fetches
     if (fetchingRef.current && !force) {
@@ -51,20 +72,29 @@ export const CartProvider = ({ children }) => {
       return
     }
 
-    // Check if we need to fetch (debounce logic)
+    // Smart debouncing - longer delay for non-forced requests
     const now = Date.now()
     const lastFetch = cartState.lastFetch
-    if (!force && lastFetch && (now - lastFetch) < 2000) {
-      console.log('🛒 CartContext: Fetch too recent, skipping')
-      return;
+    const minInterval = force ? 500 : 3000 // 3 seconds for non-forced, 500ms for forced
+    
+    if (!force && lastFetch && (now - lastFetch) < minInterval) {
+      console.log(`🛒 CartContext: Fetch too recent (${now - lastFetch}ms < ${minInterval}ms), skipping`)
+      return
     }
 
+    // Cancel any previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    
+    abortControllerRef.current = new AbortController()
     fetchingRef.current = true
     
     try {
-      console.log('🛒 CartContext: Fetching cart data...')
+      console.log('🛒 CartContext: Fetching cart data...', force ? '(forced)' : '(normal)')
       
-      if (!force) {
+      // Only show loading for forced requests or initial load
+      if (force || !cartState.lastFetch) {
         updateCartState({ 
           loading: true, 
           error: null 
@@ -74,7 +104,7 @@ export const CartProvider = ({ children }) => {
       const response = await fetch('/api/cart', {
         method: 'GET',
         credentials: 'include',
-        cache: 'no-cache',
+        signal: abortControllerRef.current.signal,
         headers: {
           'Cache-Control': 'no-cache'
         }
@@ -88,12 +118,14 @@ export const CartProvider = ({ children }) => {
       
       console.log('🛒 CartContext: Cart data received:', {
         items: data.items?.length || 0,
-        total: data.grandTotal || 0
+        total: data.grandTotal || 0,
+        cached: response.headers.get('cache-control')
       })
 
+      // Update state efficiently
       updateCartState({
         items: data.items || [],
-        count: data.items?.length || 0,
+        count: data.itemCount || data.items?.length || 0,
         total: data.grandTotal || 0,
         loading: false,
         error: null,
@@ -101,6 +133,12 @@ export const CartProvider = ({ children }) => {
       })
 
     } catch (error) {
+      // Don't log aborted requests as errors
+      if (error.name === 'AbortError') {
+        console.log('🛒 CartContext: Request aborted')
+        return
+      }
+      
       console.error('❌ CartContext: Cart fetch error:', error)
       
       updateCartState({
@@ -109,22 +147,35 @@ export const CartProvider = ({ children }) => {
         lastFetch: now
       })
       
-      // Retry logic with exponential backoff
+      // Smart retry with exponential backoff
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current)
       }
       
+      const retryDelay = force ? 2000 : 10000 // Longer delay for automatic retries
       retryTimeoutRef.current = setTimeout(() => {
         console.log('🔄 CartContext: Retrying cart fetch...')
         fetchCart(true)
-      }, 5000)
+      }, retryDelay)
 
     } finally {
       fetchingRef.current = false
+      abortControllerRef.current = null
     }
   }, [cartState.lastFetch, updateCartState])
 
-  // Optimized cart operations with immediate state updates
+  // Debounced fetch function to prevent rapid consecutive calls
+  const debouncedFetch = useCallback((force = false, delay = 200) => {
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current)
+    }
+    
+    debounceTimeoutRef.current = setTimeout(() => {
+      fetchCart(force)
+    }, delay)
+  }, [fetchCart])
+
+  // Optimized cart operations with better error handling
   const addToCart = useCallback(async (productId, quantity = 1) => {
     try {
       console.log(`🛒 CartContext: Adding ${quantity}x product ${productId}`)
@@ -146,10 +197,13 @@ export const CartProvider = ({ children }) => {
 
       console.log('✅ CartContext: Item added successfully', result)
       
-      // Immediate optimistic update for immediate UI feedback
+      // Smart optimistic update based on action
       if (result.action === 'created' && result.item) {
         updateCartState(prev => {
-          const newItems = [...prev.items, result.item]
+          const newItems = [...prev.items, {
+            ...result.item,
+            itemTotal: result.item.itemTotal || (result.item.product.productPrice * result.item.quantity)
+          }]
           const newCount = newItems.length
           const newTotal = newItems.reduce((sum, item) => sum + (item.itemTotal || 0), 0)
           
@@ -161,42 +215,52 @@ export const CartProvider = ({ children }) => {
           }
         })
       } else if (result.action === 'updated' && result.item) {
-        // Handle quantity updates for existing items
         updateCartState(prev => {
           const newItems = prev.items.map(item => 
-            item.productId === productId ? result.item : item
+            item.productId === productId ? {
+              ...result.item,
+              itemTotal: result.item.itemTotal || (result.item.product.productPrice * result.item.quantity)
+            } : item
           )
-          const newCount = newItems.length
           const newTotal = newItems.reduce((sum, item) => sum + (item.itemTotal || 0), 0)
           
           return {
             ...prev,
             items: newItems,
-            count: newCount,
             total: newTotal
           }
         })
       }
 
-      // Fetch fresh data to ensure consistency (delayed to allow optimistic update to show first)
-      setTimeout(() => fetchCart(true), 100)
+      // Delayed consistency check - only if optimistic update happened
+      if (result.action === 'created' || result.action === 'updated') {
+        debouncedFetch(true, 500) // 500ms delay for consistency check
+      }
       
       return result
     } catch (error) {
       console.error('❌ CartContext: Add to cart error:', error)
+      // Refresh cart on error to get accurate state
+      debouncedFetch(true, 100)
       throw error
     }
-  }, [updateCartState, fetchCart])
+  }, [updateCartState, debouncedFetch])
 
   const updateCartItem = useCallback(async (productId, quantity) => {
     try {
       console.log(`🛒 CartContext: Updating product ${productId} to quantity ${quantity}`)
       
-      // Optimistic update first
+      // Optimistic update with validation
+      const currentItem = cartItems.find(item => item.productId === productId)
+      if (!currentItem) {
+        throw new Error('Item not found in cart')
+      }
+
+      const newItemTotal = (currentItem.product?.productPrice || 0) * quantity
+      
       updateCartState(prev => {
         const newItems = prev.items.map(item => {
           if (item.productId === productId) {
-            const newItemTotal = (item.product?.productPrice || 0) * quantity
             return { ...item, quantity, itemTotal: newItemTotal }
           }
           return item
@@ -222,30 +286,28 @@ export const CartProvider = ({ children }) => {
       const result = await response.json()
 
       if (!response.ok) {
+        console.error('❌ CartContext: Update failed, reverting optimistic update')
+        debouncedFetch(true, 100) // Immediate revert
         throw new Error(result.error || 'Failed to update cart item')
-        // Revert optimistic update on error
-        fetchCart(true)
       }
 
       console.log('✅ CartContext: Item updated successfully')
       
-      // Fetch fresh data to ensure consistency
-      setTimeout(() => fetchCart(true), 100)
+      // Optional consistency check after longer delay
+      debouncedFetch(true, 1000)
       
       return result
     } catch (error) {
       console.error('❌ CartContext: Update cart item error:', error)
-      // Revert optimistic update on error
-      fetchCart(true)
       throw error
     }
-  }, [fetchCart, updateCartState])
+  }, [cartItems, updateCartState, debouncedFetch])
 
   const removeFromCart = useCallback(async (productId) => {
     try {
       console.log(`🛒 CartContext: Removing product ${productId}`)
       
-      // Optimistic update first (immediate feedback)
+      // Optimistic removal
       updateCartState(prev => {
         const newItems = prev.items.filter(item => item.productId !== productId)
         const newCount = newItems.length
@@ -267,72 +329,80 @@ export const CartProvider = ({ children }) => {
       const result = await response.json()
 
       if (!response.ok) {
+        console.error('❌ CartContext: Remove failed, reverting optimistic update')
+        debouncedFetch(true, 100) // Immediate revert
         throw new Error(result.error || 'Failed to remove cart item')
-        // Revert optimistic update on error
-        fetchCart(true)
       }
 
       console.log('✅ CartContext: Item removed successfully')
       
-      // Fresh fetch for accuracy (delayed to allow optimistic update to show first)
-      setTimeout(() => fetchCart(true), 100)
+      // Optional consistency check
+      debouncedFetch(true, 1000)
       
       return result
     } catch (error) {
       console.error('❌ CartContext: Remove from cart error:', error)
-      // Revert optimistic update on error
-      fetchCart(true)
       throw error
     }
-  }, [updateCartState, fetchCart])
+  }, [updateCartState, debouncedFetch])
 
   const clearCart = useCallback(async () => {
     try {
       console.log('🛒 CartContext: Clearing entire cart')
       
-      // Optimistic update first
+      // Store items for potential revert
+      const itemsToDelete = [...cartItems]
+      
+      // Optimistic clear
       updateCartState({
         items: [],
         count: 0,
         total: 0
       })
       
-      const promises = cartItems.map(item => 
+      // Delete all items in parallel
+      const deletePromises = itemsToDelete.map(item => 
         fetch(`/api/cart/${item.productId}`, {
           method: 'DELETE',
           credentials: 'include'
         })
       )
       
-      await Promise.all(promises)
+      const responses = await Promise.allSettled(deletePromises)
       
-      // Fetch fresh data to ensure consistency
-      setTimeout(() => fetchCart(true), 100)
+      // Check if any deletions failed
+      const failures = responses.filter(r => r.status === 'rejected')
+      if (failures.length > 0) {
+        console.warn(`❌ ${failures.length} items failed to delete, refreshing cart`)
+        debouncedFetch(true, 100)
+      } else {
+        console.log('✅ CartContext: All items cleared successfully')
+        // Optional consistency check
+        debouncedFetch(true, 2000)
+      }
       
     } catch (error) {
       console.error('❌ CartContext: Clear cart error:', error)
-      // Revert on error
-      fetchCart(true)
+      // Refresh cart to get accurate state
+      debouncedFetch(true, 100)
       throw error
     }
-  }, [cartItems, updateCartState, fetchCart])
+  }, [cartItems, updateCartState, debouncedFetch])
 
-  // Enhanced cart refresh for external triggers
+  // Optimized refresh function
   const refreshCart = useCallback((immediate = false) => {
     console.log('🔄 CartContext: Manual cart refresh requested')
     if (immediate) {
       fetchCart(true)
     } else {
-      // Debounced refresh
-      setTimeout(() => fetchCart(true), 200)
+      debouncedFetch(true, 100)
     }
-  }, [fetchCart])
+  }, [fetchCart, debouncedFetch])
 
-  // Initial cart fetch and user change handling
+  // Optimized user change handling
   useEffect(() => {
     const currentUserId = user?.id || null
     
-    // Check if user changed
     if (lastUserIdRef.current !== currentUserId) {
       console.log('🔄 CartContext: User changed, fetching cart:', {
         from: lastUserIdRef.current,
@@ -341,57 +411,71 @@ export const CartProvider = ({ children }) => {
       
       lastUserIdRef.current = currentUserId
       
-      // Reset state and fetch
+      // Reset state
       updateCartState({
         items: [],
         count: 0,
         total: 0,
         loading: true,
-        error: null
+        error: null,
+        lastFetch: null
       })
       
-      // Slight delay to ensure auth is fully settled
-      setTimeout(() => fetchCart(true), 300)
-    } else if (!cartState.lastFetch) {
-      // Initial fetch if no previous fetch
+      // Fetch with minimal delay for user changes
+      setTimeout(() => fetchCart(true), 100)
+    } else if (!cartState.lastFetch && (isAuthenticated || currentUserId === null)) {
+      // Initial fetch for new sessions
+      console.log('🔄 CartContext: Initial cart fetch')
       fetchCart(true)
     }
-  }, [user?.id, cartState.lastFetch, updateCartState, fetchCart])
+  }, [user?.id, cartState.lastFetch, isAuthenticated, updateCartState, fetchCart])
 
-  // Listen for cart update events (including merge)
+  // Optimized event listeners
   useEffect(() => {
     const handleCartUpdate = (event) => {
       console.log('🛒 CartContext: Cart update event received:', event.detail)
-      
-      // Force immediate refresh on cart events
-      refreshCart(true)
+      debouncedFetch(true, 200)
     }
 
-    const handleStorageUpdate = () => {
-      console.log('🛒 CartContext: Storage update detected, refreshing cart')
-      refreshCart(true)
+    const handleVisibilityChange = () => {
+      // Refresh cart when user comes back to the page
+      if (!document.hidden && cartState.lastFetch) {
+        const timeSinceLastFetch = Date.now() - cartState.lastFetch
+        if (timeSinceLastFetch > 30000) { // 30 seconds
+          console.log('🛒 CartContext: Page visible after 30s, refreshing cart')
+          debouncedFetch(true, 500)
+        }
+      }
     }
 
     // Listen for custom cart events
     window.addEventListener('cartUpdated', handleCartUpdate)
     window.addEventListener('cartMerged', handleCartUpdate)
-    window.addEventListener('storage', handleStorageUpdate)
+    window.addEventListener('visibilitychange', handleVisibilityChange)
     
     return () => {
       window.removeEventListener('cartUpdated', handleCartUpdate)
       window.removeEventListener('cartMerged', handleCartUpdate)
-      window.removeEventListener('storage', handleStorageUpdate)
+      window.removeEventListener('visibilitychange', handleVisibilityChange)
       
-      // Cleanup timeout
+      // Cleanup timeouts
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current)
       }
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current)
+      }
+      
+      // Cancel any pending requests
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
     }
-  }, [refreshCart])
+  }, [debouncedFetch, cartState.lastFetch])
 
-  // Memoized context value to prevent unnecessary re-renders
+  // Memoized context value with dependency optimization
   const contextValue = useMemo(() => ({
-    // State (memoized)
+    // State (already memoized)
     cartItems,
     cartCount,
     cartTotal,
@@ -407,7 +491,13 @@ export const CartProvider = ({ children }) => {
     
     // Utilities
     isEmpty: cartCount === 0,
-    hasItems: cartCount > 0
+    hasItems: cartCount > 0,
+    
+    // Debug info (remove in production)
+    _debug: process.env.NODE_ENV === 'development' ? {
+      lastFetch: cartState.lastFetch,
+      fetchInProgress: fetchingRef.current
+    } : undefined
   }), [
     cartItems,
     cartCount,
@@ -418,7 +508,8 @@ export const CartProvider = ({ children }) => {
     updateCartItem,
     removeFromCart,
     clearCart,
-    refreshCart
+    refreshCart,
+    cartState.lastFetch
   ])
 
   return (
@@ -439,7 +530,7 @@ export const useCart = () => {
   return context
 }
 
-// Selectors for specific cart data (prevents unnecessary re-renders)
+// Selective hooks to prevent unnecessary re-renders
 export const useCartCount = () => {
   const { cartCount } = useCart()
   return cartCount
@@ -453,4 +544,9 @@ export const useCartItems = () => {
 export const useCartTotal = () => {
   const { cartTotal } = useCart()
   return cartTotal
+}
+
+export const useCartLoading = () => {
+  const { loading } = useCart()
+  return loading
 }
