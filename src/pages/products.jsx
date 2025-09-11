@@ -72,11 +72,11 @@ export default function Products() {
           <div className="max-w-7xl mx-auto px-4 text-center">
             <h1 className="text-4xl md:text-6xl font-bold mb-4">Our Products</h1>
             <p className="text-xl md:text-2xl mb-8">Ancient Wisdom, Modern Solutions</p>
-            <div className="bg-black bg-opacity-30 inline-block px-6 py-3 rounded-lg">
+            {/* <div className="bg-black bg-opacity-30 inline-block px-6 py-3 rounded-lg">
               <p className="text-lg">
                 Trusted by <span className="font-bold">10 Lakh+</span> satisfied customers
               </p>
-            </div>
+            </div> */}
           </div>
         </div>
 
@@ -92,7 +92,7 @@ export default function Products() {
                   className="bg-white hover:shadow-lg transition-shadow"
                 >
                   <CardHeader>
-                    <div className="relative h-48 mb-4">
+                    <div className="relative h-80 mb-4">
                       <Image
                         src={product.productImage}
                         alt={product.productName}
@@ -130,7 +130,7 @@ export default function Products() {
           )}
         </div>
 
-        {/* Featured Section */}
+        {/* Featured Section
         <div className="max-w-7xl mx-auto px-4 mt-16">
           <h2 className="text-3xl font-bold text-center mb-12 text-black">
             Featured Combos
@@ -196,8 +196,8 @@ export default function Products() {
                 </CardContent>
               </Card>
             ))}
-          </div>
-        </div>
+          </div> */}
+        {/* </div> */}
       </div>
     </>
   );
