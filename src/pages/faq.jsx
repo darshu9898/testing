@@ -156,7 +156,7 @@ export default function Faq() {
                 placeholder="Search for answers..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-6 py-4 text-lg border-2 border-gray-300 rounded-full focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
+                className="w-full px-6 py-4 text-lg border-2 border-gray-300 rounded-full focus:ring-2 focus:ring-[#2F674A] focus:border-transparent placeholder-gray-500"
               />
               <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400">
                 <span className="text-xl">🔍</span>
