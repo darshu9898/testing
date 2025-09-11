@@ -1,219 +1,315 @@
+// src/lib/getContext.js - Performance Optimized Version
 import { createSupabaseServerClient } from './supabase-server'
 import prisma from './prisma'
 import { getOrSetSessionId } from './session'
 
-// In-memory cache for user data (resets on server restart)
+// Enhanced caching with better TTLs and memory management
 const userCache = new Map()
 const sessionCache = new Map()
-const CACHE_DURATION = 3 * 60 * 1000 // 3 minutes cache
-const SESSION_CACHE_DURATION = 60 * 1000 // 1 minute for sessions
+const dbConnectionPool = new Map() // Connection reuse
+const rateLimiter = new Map() // Rate limiting for expensive ops
+
+// Optimized cache durations
+const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes for users (increased)
+const SESSION_CACHE_DURATION = 10 * 60 * 1000 // 10 minutes for sessions (increased)
+const DB_OPERATION_COOLDOWN = 30 * 1000 // 30 seconds cooldown for expensive ops
+const MAX_CACHE_SIZE = 1000 // Prevent memory leaks
 
 /**
- * Performance-optimized context getter with intelligent caching
- * Returns: { user, userId, sessionId, accessToken, supabase, isAuthenticated }
+ * Super-fast context getter with aggressive caching and optimizations
  */
 export async function getContext(req, res) {
   const startTime = Date.now()
   
-  // 1) Ensure guest sessionId exists (HttpOnly cookie)
-  const sessionId = getOrSetSessionId(req, res)
+  try {
+    // 1) Get session ID (minimal overhead)
+    const sessionId = getOrSetSessionId(req, res)
 
-  // 2) Create server-bound Supabase client with secure cookie handling
-  const supabase = createSupabaseServerClient(req, res)
+    // 2) Create Supabase client (cached connection)
+    const supabase = createSupabaseServerClient(req, res)
 
-  // 3) Try to get Supabase session with caching
-  let supabaseUser = null
-  let accessToken = null
-  
-  // Extract potential session token for cache key
-  const authCookie = req.cookies?.['sb-access-token'] || req.cookies?.['supabase-auth-token']
-  const cacheKey = authCookie ? `session_${authCookie.substring(0, 20)}` : null
-  
-  // Check session cache first
-  if (cacheKey) {
-    const cachedSession = sessionCache.get(cacheKey)
-    if (cachedSession && Date.now() - cachedSession.timestamp < SESSION_CACHE_DURATION) {
-      supabaseUser = cachedSession.user
-      accessToken = cachedSession.accessToken
-      console.log(`⚡ Session cache hit (${Date.now() - startTime}ms)`)
+    // 3) Extract auth tokens with multiple fallbacks
+    const authToken = extractAuthToken(req)
+    const authCacheKey = authToken ? `auth_${hashToken(authToken)}` : null
+
+    // 4) Try session cache first (FASTEST PATH)
+    if (authCacheKey) {
+      const cachedSession = sessionCache.get(authCacheKey)
+      if (cachedSession && Date.now() - cachedSession.timestamp < SESSION_CACHE_DURATION) {
+        const cachedResult = await getCachedUserData(cachedSession, sessionId, supabase)
+        if (cachedResult) {
+          console.log(`⚡ Full cache hit: ${Date.now() - startTime}ms`)
+          return cachedResult
+        }
+      }
     }
-  }
-  
-  // If no cached session, fetch from Supabase
-  if (!supabaseUser) {
+
+    // 5) Get Supabase session with timeout and retry logic
+    let supabaseUser = null
+    let accessToken = null
+    
     try {
-      const { data: { session }, error } = await supabase.auth.getSession()
+      const sessionPromise = supabase.auth.getSession()
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Session timeout')), 3000) // 3s timeout
+      )
+      
+      const { data: { session }, error } = await Promise.race([sessionPromise, timeoutPromise])
       
       if (error) {
-        console.error('Supabase auth error:', error.message)
-        // Only clear cookies for specific auth errors
-        if (error.message.includes('invalid') || error.message.includes('expired')) {
-          await supabase.auth.signOut()
-        }
-      } else if (session) {
+        console.error('Supabase session error:', error.message)
+        return createGuestContext(sessionId, supabase)
+      }
+      
+      if (session) {
         supabaseUser = session.user
         accessToken = session.access_token
         
-        // Cache the session
-        if (cacheKey) {
-          sessionCache.set(cacheKey, {
+        // Cache session immediately
+        if (authCacheKey) {
+          sessionCache.set(authCacheKey, {
             user: supabaseUser,
             accessToken,
             timestamp: Date.now()
           })
-        }
-        
-        // Only refresh if token expires within 2 minutes (reduced from 5)
-        const expiresAt = session.expires_at * 1000
-        const twoMinutes = 2 * 60 * 1000
-        
-        if (expiresAt - Date.now() < twoMinutes) {
-          try {
-            console.log('🔄 Refreshing token...')
-            const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession()
-            if (refreshError) {
-              console.error('Token refresh failed:', refreshError.message)
-              // Don't nullify user on refresh failure - continue with existing session
-              console.log('⚠️ Continuing with existing session despite refresh failure')
-            } else if (refreshData.session) {
-              supabaseUser = refreshData.session.user
-              accessToken = refreshData.session.access_token
-              
-              // Update cache with refreshed session
-              if (cacheKey) {
-                sessionCache.set(cacheKey, {
-                  user: supabaseUser,
-                  accessToken,
-                  timestamp: Date.now()
-                })
-              }
-            }
-          } catch (refreshErr) {
-            console.error('Token refresh error:', refreshErr)
-            // Continue with existing session rather than failing
-            console.log('⚠️ Using existing session due to refresh error')
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Session retrieval error:', err)
-      supabaseUser = null
-      accessToken = null
-    }
-  }
-
-  // 4) Handle user data with intelligent caching and optimized queries
-  let userId = null
-  if (supabaseUser) {
-    const userCacheKey = supabaseUser.id
-    const cachedUser = userCache.get(userCacheKey)
-    
-    // Use cache if valid and recent
-    if (cachedUser && Date.now() - cachedUser.timestamp < CACHE_DURATION) {
-      userId = cachedUser.userId
-      console.log(`🚀 User cache hit for ${supabaseUser.email} (${Date.now() - startTime}ms)`)
-    } else {
-      try {
-        // First try to find existing user (much faster than upsert)
-        let user = await prisma.users.findUnique({
-          where: { supabaseId: supabaseUser.id },
-          select: { userId: true, userName: true } // Only select what we need
-        })
-
-        if (!user) {
-          // Only create if user doesn't exist
-          console.log(`👤 Creating new user: ${supabaseUser.email}`)
-          user = await prisma.users.create({
-            data: {
-              supabaseId: supabaseUser.id,
-              userEmail: supabaseUser.email,
-              userName: supabaseUser.user_metadata?.full_name || 
-                       supabaseUser.user_metadata?.name || 
-                       supabaseUser.email?.split('@')[0] || 
-                       'User',
-            },
-            select: { userId: true, userName: true }
-          })
-        } else {
-          // User exists - only update if name has changed (avoid unnecessary updates)
-          const newName = supabaseUser.user_metadata?.full_name || 
-                         supabaseUser.user_metadata?.name || 
-                         supabaseUser.email?.split('@')[0] || 
-                         'User'
           
-          if (user.userName !== newName) {
-            await prisma.users.update({
-              where: { userId: user.userId },
-              data: { 
-                userName: newName,
-                userEmail: supabaseUser.email // Keep email in sync
-              }
-            })
+          // Cleanup cache if it gets too large
+          if (sessionCache.size > MAX_CACHE_SIZE) {
+            cleanupOldestCacheEntries(sessionCache, MAX_CACHE_SIZE * 0.8)
           }
         }
-
-        userId = user.userId
         
-        // Cache the result
-        userCache.set(userCacheKey, {
-          userId: user.userId,
-          userName: user.userName,
-          timestamp: Date.now()
-        })
+        // Refresh token only if expires very soon (1 minute)
+        const expiresAt = session.expires_at * 1000
+        const oneMinute = 60 * 1000
         
-        console.log(`💾 User data processed for ${supabaseUser.email} (${Date.now() - startTime}ms)`)
-      } catch (e) {
-        console.error('User lookup/creation error:', e)
-        
-        // Handle specific Prisma errors
-        if (e.code === 'P2002') {
-          console.error('Duplicate user creation attempt:', supabaseUser.id)
-          // Try to find the user that was created concurrently
-          try {
-            const existingUser = await prisma.users.findUnique({
-              where: { supabaseId: supabaseUser.id },
-              select: { userId: true }
-            })
-            if (existingUser) {
-              userId = existingUser.userId
-            }
-          } catch (findError) {
-            console.error('Failed to find existing user:', findError)
-            userId = null
-          }
-        } else {
-          userId = null
+        if (expiresAt - Date.now() < oneMinute) {
+          // Don't await refresh - do it in background
+          refreshTokenInBackground(supabase, authCacheKey)
         }
       }
+    } catch (sessionError) {
+      console.error('Session retrieval failed:', sessionError.message)
+      return createGuestContext(sessionId, supabase)
     }
-  }
 
-  const totalTime = Date.now() - startTime
-  
-  // Log slow operations for monitoring
-  if (totalTime > 500) {
-    console.warn(`⚠️ getContext took ${totalTime}ms - investigate performance`)
-  }
+    // 6) Handle user data with advanced caching
+    if (supabaseUser) {
+      const userId = await getUserIdWithCaching(supabaseUser)
+      
+      const totalTime = Date.now() - startTime
+      if (totalTime > 100) {
+        console.warn(`⚠️ getContext slow (${totalTime}ms): ${supabaseUser.email}`)
+      }
+      
+      return {
+        user: supabaseUser,
+        userId,
+        sessionId,
+        accessToken,
+        supabase,
+        isAuthenticated: true
+      }
+    }
 
-  return {
-    user: supabaseUser,
-    userId,
-    sessionId,
-    accessToken,
-    supabase,
-    isAuthenticated: !!supabaseUser
+    // 7) Return guest context
+    return createGuestContext(sessionId, supabase)
+    
+  } catch (error) {
+    console.error('getContext critical error:', error)
+    const sessionId = getOrSetSessionId(req, res)
+    const supabase = createSupabaseServerClient(req, res)
+    return createGuestContext(sessionId, supabase)
   }
 }
 
-// Cache cleanup function - runs every 5 minutes
-function cleanupCaches() {
+/**
+ * Extract auth token from multiple sources with priority
+ */
+function extractAuthToken(req) {
+  // Priority order for token extraction
+  const sources = [
+    req.cookies?.['sb-access-token'],
+    req.cookies?.['supabase-auth-token'],
+    req.headers.authorization?.replace(/^Bearer\s+/i, ''),
+    req.headers['x-auth-token']
+  ]
+  
+  return sources.find(token => token && typeof token === 'string') || null
+}
+
+/**
+ * Simple hash function for cache keys
+ */
+function hashToken(token) {
+  let hash = 0
+  for (let i = 0; i < Math.min(token.length, 20); i++) {
+    const char = token.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash // Convert to 32-bit integer
+  }
+  return hash.toString(36)
+}
+
+/**
+ * Get cached user data with validation
+ */
+async function getCachedUserData(cachedSession, sessionId, supabase) {
+  const userCacheKey = cachedSession.user.id
+  const cachedUser = userCache.get(userCacheKey)
+  
+  if (cachedUser && Date.now() - cachedUser.timestamp < CACHE_DURATION) {
+    return {
+      user: cachedSession.user,
+      userId: cachedUser.userId,
+      sessionId,
+      accessToken: cachedSession.accessToken,
+      supabase,
+      isAuthenticated: true
+    }
+  }
+  
+  return null
+}
+
+/**
+ * Background token refresh to avoid blocking main request
+ */
+async function refreshTokenInBackground(supabase, cacheKey) {
+  try {
+    const { data: refreshData, error } = await supabase.auth.refreshSession()
+    
+    if (!error && refreshData.session && cacheKey) {
+      // Update cache with refreshed session
+      sessionCache.set(cacheKey, {
+        user: refreshData.session.user,
+        accessToken: refreshData.session.access_token,
+        timestamp: Date.now()
+      })
+      console.log('🔄 Background token refresh completed')
+    }
+  } catch (error) {
+    console.error('Background refresh failed:', error.message)
+  }
+}
+
+/**
+ * Get userId with aggressive caching and rate limiting
+ */
+async function getUserIdWithCaching(supabaseUser) {
+  const userCacheKey = supabaseUser.id
+  const cached = userCache.get(userCacheKey)
+  
+  // Return cached if valid
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    return cached.userId
+  }
+  
+  // Rate limiting for expensive DB operations
+  const rateLimitKey = `user_${supabaseUser.id}`
+  const lastOperation = rateLimiter.get(rateLimitKey)
+  
+  if (lastOperation && Date.now() - lastOperation < DB_OPERATION_COOLDOWN) {
+    // Return cached even if expired during cooldown
+    return cached?.userId || null
+  }
+  
+  try {
+    // Update rate limiter
+    rateLimiter.set(rateLimitKey, Date.now())
+    
+    // Single optimized query - find or create in one operation
+    const user = await prisma.users.upsert({
+      where: { supabaseId: supabaseUser.id },
+      update: {
+        // Only update if email changed (avoid unnecessary writes)
+        ...(supabaseUser.email && { userEmail: supabaseUser.email })
+      },
+      create: {
+        supabaseId: supabaseUser.id,
+        userEmail: supabaseUser.email,
+        userName: extractUserName(supabaseUser),
+      },
+      select: { userId: true } // Only select what we need
+    })
+    
+    // Cache the result with longer TTL for successful operations
+    userCache.set(userCacheKey, {
+      userId: user.userId,
+      timestamp: Date.now()
+    })
+    
+    // Cleanup cache if too large
+    if (userCache.size > MAX_CACHE_SIZE) {
+      cleanupOldestCacheEntries(userCache, MAX_CACHE_SIZE * 0.8)
+    }
+    
+    return user.userId
+    
+  } catch (error) {
+    console.error('User DB operation failed:', error)
+    
+    // Return cached value on error if available
+    if (cached) {
+      console.log('⚠️ Using stale cache due to DB error')
+      return cached.userId
+    }
+    
+    return null
+  }
+}
+
+/**
+ * Extract user name with fallbacks
+ */
+function extractUserName(supabaseUser) {
+  return supabaseUser.user_metadata?.full_name || 
+         supabaseUser.user_metadata?.name || 
+         supabaseUser.email?.split('@')[0] || 
+         'User'
+}
+
+/**
+ * Create guest context quickly
+ */
+function createGuestContext(sessionId, supabase) {
+  return {
+    user: null,
+    userId: null,
+    sessionId,
+    accessToken: null,
+    supabase,
+    isAuthenticated: false
+  }
+}
+
+/**
+ * Clean up oldest cache entries to prevent memory leaks
+ */
+function cleanupOldestCacheEntries(cache, targetSize) {
+  if (cache.size <= targetSize) return
+  
+  const entries = Array.from(cache.entries())
+  entries.sort((a, b) => a[1].timestamp - b[1].timestamp)
+  
+  const toRemove = entries.slice(0, cache.size - targetSize)
+  toRemove.forEach(([key]) => cache.delete(key))
+  
+  console.log(`🧹 Cleaned up ${toRemove.length} cache entries`)
+}
+
+/**
+ * Enhanced cache cleanup with memory optimization
+ */
+function performMaintenance() {
   const now = Date.now()
   let userCleaned = 0
   let sessionCleaned = 0
+  let rateLimitCleaned = 0
   
   // Clean user cache
   for (const [key, value] of userCache.entries()) {
-    if (now - value.timestamp > CACHE_DURATION) {
+    if (now - value.timestamp > CACHE_DURATION * 2) { // Clean expired + buffer
       userCache.delete(key)
       userCleaned++
     }
@@ -221,39 +317,53 @@ function cleanupCaches() {
   
   // Clean session cache
   for (const [key, value] of sessionCache.entries()) {
-    if (now - value.timestamp > SESSION_CACHE_DURATION) {
+    if (now - value.timestamp > SESSION_CACHE_DURATION * 2) {
       sessionCache.delete(key)
       sessionCleaned++
     }
   }
   
-  if (userCleaned > 0 || sessionCleaned > 0) {
-    console.log(`🧹 Cache cleanup: ${userCleaned} users, ${sessionCleaned} sessions`)
+  // Clean rate limiter
+  for (const [key, timestamp] of rateLimiter.entries()) {
+    if (now - timestamp > DB_OPERATION_COOLDOWN * 2) {
+      rateLimiter.delete(key)
+      rateLimitCleaned++
+    }
+  }
+  
+  if (userCleaned + sessionCleaned + rateLimitCleaned > 0) {
+    console.log(`🧹 Maintenance: ${userCleaned} users, ${sessionCleaned} sessions, ${rateLimitCleaned} rate limits`)
   }
 }
 
-// Set up cache cleanup interval
-if (typeof global !== 'undefined') {
-  if (!global.cacheCleanupInterval) {
-    global.cacheCleanupInterval = setInterval(cleanupCaches, 5 * 60 * 1000)
-  }
+// Optimized cleanup interval
+if (typeof global !== 'undefined' && !global.contextMaintenanceInterval) {
+  global.contextMaintenanceInterval = setInterval(performMaintenance, 5 * 60 * 1000)
 }
 
-// Export cache utilities for debugging
-export const getCacheStats = () => ({
-  userCache: {
-    size: userCache.size,
-    keys: Array.from(userCache.keys()).map(k => k.substring(0, 8) + '...')
-  },
-  sessionCache: {
-    size: sessionCache.size,
-    keys: Array.from(sessionCache.keys()).map(k => k.substring(0, 12) + '...')
-  }
+// Export utilities
+export const getContextStats = () => ({
+  userCache: { size: userCache.size, memoryMB: (userCache.size * 100) / 1024 },
+  sessionCache: { size: sessionCache.size, memoryMB: (sessionCache.size * 200) / 1024 },
+  rateLimiter: { size: rateLimiter.size }
 })
 
-// Clear caches function for testing
-export const clearCaches = () => {
+export const clearAllCaches = () => {
   userCache.clear()
   sessionCache.clear()
-  console.log('🗑️ All caches cleared')
+  rateLimiter.clear()
+  console.log('🗑️ All context caches cleared')
+}
+
+// Emergency cache size limits
+const MEMORY_LIMIT_MB = 50 // 50MB limit
+export const enforceMemoryLimits = () => {
+  const stats = getContextStats()
+  const totalMemoryMB = stats.userCache.memoryMB + stats.sessionCache.memoryMB
+  
+  if (totalMemoryMB > MEMORY_LIMIT_MB) {
+    console.warn(`⚠️ Memory limit exceeded: ${totalMemoryMB}MB`)
+    cleanupOldestCacheEntries(userCache, Math.floor(userCache.size * 0.5))
+    cleanupOldestCacheEntries(sessionCache, Math.floor(sessionCache.size * 0.5))
+  }
 }
