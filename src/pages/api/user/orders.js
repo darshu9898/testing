@@ -1,36 +1,49 @@
-// src/pages/api/user/orders.js
-import { getContext } from '@/lib/getContext';
-import prisma from '@/lib/prisma';
+// src/pages/api/user/orders.js - Ultra-optimized version
+import { getContext } from '@/lib/getContext'
+import prisma from '@/lib/prisma'
 
 export default async function handler(req, res) {
+  const startTime = Date.now()
+  
   try {
-    const { userId, isAuthenticated } = await getContext(req, res);
+    const contextStart = Date.now()
+    const { userId, isAuthenticated } = await getContext(req, res)
+    console.log(`⚡ Context: ${Date.now() - contextStart}ms`)
 
     if (!isAuthenticated || !userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return res.status(401).json({ error: 'Authentication required' })
     }
 
-    // GET: Fetch user orders
+    // GET: Fetch user orders (OPTIMIZED)
     if (req.method === 'GET') {
-      const { orderId } = req.query;
+      console.log('📋 Orders API: GET started')
+      const { orderId } = req.query
 
-      let whereClause = { userId: parseInt(userId) };
-      
-      // If specific order requested
+      let whereClause = { userId: parseInt(userId) }
       if (orderId) {
-        whereClause.orderId = parseInt(orderId);
+        whereClause.orderId = parseInt(orderId)
       }
 
+      const dbStart = Date.now()
+
+      // Single optimized query with selective fields
       const orders = await prisma.orders.findMany({
         where: whereClause,
-        include: {
+        select: {
+          orderId: true,
+          orderAmount: true,
+          orderDate: true,
+          shippingAddress: true,
           orderDetails: {
-            include: {
+            select: {
+              orderDetailId: true,
+              quantity: true,
+              productPrice: true,
               product: {
                 select: {
+                  productId: true,
                   productName: true,
-                  productImage: true,
-                  productPrice: true
+                  productImage: true
                 }
               }
             }
@@ -42,88 +55,105 @@ export default async function handler(req, res) {
               paymentDate: true,
               razorpayPaymentId: true
             },
-            orderBy: {
-              paymentDate: 'desc'
-            },
-            take: 1 // Get only the latest payment
+            orderBy: { paymentDate: 'desc' },
+            take: 1
           }
         },
-        orderBy: {
-          orderDate: 'desc'
+        orderBy: { orderDate: 'desc' },
+        take: orderId ? 1 : 50 // Limit to 50 orders for performance
+      })
+
+      console.log(`💾 Orders query: ${Date.now() - dbStart}ms`)
+
+      // Process orders efficiently in memory
+      const formattedOrders = orders.map(order => {
+        const latestPayment = order.payments[0]
+        
+        return {
+          orderId: order.orderId,
+          orderAmount: order.orderAmount,
+          orderDate: order.orderDate,
+          shippingAddress: order.shippingAddress,
+          totalItems: order.orderDetails.length,
+          paymentStatus: latestPayment?.paymentStatus || 'pending',
+          paymentMode: latestPayment?.paymentMode || 'unknown',
+          items: order.orderDetails.map(detail => ({
+            productId: detail.product.productId,
+            productName: detail.product.productName,
+            productImage: detail.product.productImage,
+            quantity: detail.quantity,
+            productPrice: detail.productPrice,
+            lineTotal: detail.productPrice * detail.quantity
+          }))
         }
-      });
+      })
 
-      // Format orders for frontend
-      const formattedOrders = orders.map(order => ({
-        orderId: order.orderId,
-        orderAmount: order.orderAmount,
-        orderDate: order.orderDate,
-        shippingAddress: order.shippingAddress, // Include shipping address
-        totalItems: order.orderDetails.length,
-        paymentStatus: order.payments[0]?.paymentStatus || 'pending',
-        paymentMode: order.payments[0]?.paymentMode || 'unknown',
-        items: order.orderDetails.map(detail => ({
-          productName: detail.product.productName,
-          productImage: detail.product.productImage,
-          quantity: detail.quantity,
-          productPrice: detail.productPrice,
-          lineTotal: detail.productPrice * detail.quantity
-        }))
-      }));
-
-      return res.status(200).json({ orders: formattedOrders });
+      console.log(`✅ Orders GET total: ${Date.now() - startTime}ms`)
+      
+      // Cache for 1 minute
+      res.setHeader('Cache-Control', 'private, max-age=60')
+      
+      return res.status(200).json({ orders: formattedOrders })
     }
 
-    // POST: Create new order
+    // POST: Create new order (OPTIMIZED)
     if (req.method === 'POST') {
-      const { shippingAddress, paymentMethod } = req.body;
+      console.log('📋 Orders API: POST started')
+      const { shippingAddress, paymentMethod = 'online' } = req.body
 
       if (!shippingAddress) {
-        return res.status(400).json({ error: 'Shipping address is required' });
+        return res.status(400).json({ error: 'Shipping address is required' })
       }
 
-      console.log('🛒 Creating order for user:', userId, 'Payment method:', paymentMethod);
+      const dbStart = Date.now()
 
-      // Get user's cart items with validation
-      const cartItems = await prisma.cart.findMany({
-        where: { userId: parseInt(userId) },
-        include: { product: true }
-      });
-
-      if (cartItems.length === 0) {
-        return res.status(400).json({ error: 'Cart is empty' });
-      }
-
-      console.log('📦 Found cart items:', cartItems.length);
-
-      // Validate stock availability before creating order
-      for (const item of cartItems) {
-        if (!item.product) {
-          return res.status(400).json({ error: `Product not found for cart item ${item.cartId}` });
-        }
-        if (item.quantity > item.product.productStock) {
-          return res.status(400).json({ 
-            error: `Insufficient stock for ${item.product.productName}. Only ${item.product.productStock} available.` 
-          });
-        }
-      }
-
-      // Calculate total amount
-      const orderAmount = cartItems.reduce((total, item) => {
-        return total + (item.product.productPrice * item.quantity);
-      }, 0);
-
-      console.log('💰 Order amount calculated:', orderAmount);
-
-      // Use transaction for order creation
+      // OPTIMIZED: Single transaction with efficient queries
       const result = await prisma.$transaction(async (tx) => {
-        // Create order with order details and shipping address
+        // Get cart items with minimal fields
+        const cartItems = await tx.cart.findMany({
+          where: { userId: parseInt(userId) },
+          select: {
+            cartId: true,
+            productId: true,
+            quantity: true,
+            product: {
+              select: {
+                productId: true,
+                productName: true,
+                productPrice: true,
+                productStock: true,
+                productImage: true
+              }
+            }
+          }
+        })
+
+        if (cartItems.length === 0) {
+          throw { status: 400, message: 'Cart is empty' }
+        }
+
+        // Validate stock efficiently
+        for (const item of cartItems) {
+          if (item.quantity > item.product.productStock) {
+            throw { 
+              status: 400, 
+              message: `Insufficient stock for ${item.product.productName}. Only ${item.product.productStock} available.` 
+            }
+          }
+        }
+
+        // Calculate total
+        const orderAmount = cartItems.reduce((total, item) => 
+          total + (item.product.productPrice * item.quantity), 0
+        )
+
+        // Create order with order details in one operation
         const order = await tx.orders.create({
           data: {
             userId: parseInt(userId),
-            orderAmount: orderAmount,
+            orderAmount,
             orderDate: new Date(),
-            shippingAddress: shippingAddress, // Add shipping address to order
+            shippingAddress,
             orderDetails: {
               create: cartItems.map(item => ({
                 productId: item.productId,
@@ -132,27 +162,16 @@ export default async function handler(req, res) {
               }))
             }
           },
-          include: {
-            orderDetails: {
-              include: {
-                product: {
-                  select: {
-                    productName: true,
-                    productImage: true,
-                    productPrice: true
-                  }
-                }
-              }
-            }
+          select: {
+            orderId: true,
+            orderAmount: true,
+            orderDate: true,
+            shippingAddress: true
           }
-        });
+        })
 
-        console.log('✅ Order created with ID:', order.orderId);
-
-        // Handle COD orders - complete the process immediately
+        // Handle COD orders
         if (paymentMethod === 'cod') {
-          console.log('💰 Processing COD order...');
-
           // Create COD payment record
           await tx.payments.create({
             data: {
@@ -160,96 +179,78 @@ export default async function handler(req, res) {
               orderId: order.orderId,
               razorpayOrderId: `cod_${order.orderId}_${Date.now()}`,
               paymentMode: 'cod',
-              paymentStatus: 'pending_cod', // COD orders are pending until delivery
+              paymentStatus: 'pending_cod',
               paymentAmount: orderAmount,
               paymentDate: new Date()
             }
-          });
+          })
 
-          // Update product stock for COD orders
-          for (const item of cartItems) {
-            const updatedProduct = await tx.products.update({
+          // Update stock for COD orders (bulk operations)
+          const stockUpdates = cartItems.map(item => 
+            tx.products.update({
               where: { productId: item.productId },
-              data: { 
-                productStock: { 
-                  decrement: item.quantity 
-                } 
-              }
-            });
-            console.log(`📉 Reduced stock for product ${item.productId}: ${updatedProduct.productStock + item.quantity} -> ${updatedProduct.productStock}`);
-          }
-
-          // Clear user's cart for COD orders
-          const deletedCartItems = await tx.cart.deleteMany({
+              data: { productStock: { decrement: item.quantity } }
+            })
+          )
+          
+          await Promise.all(stockUpdates)
+          
+          // Clear cart
+          await tx.cart.deleteMany({
             where: { userId: parseInt(userId) }
-          });
-          console.log(`🧹 Cleared ${deletedCartItems.count} items from cart`);
+          })
         }
-        
-        // For non-COD orders, DON'T update stock or clear cart yet
-        // This will be done in the payment verification step
 
-        return order;
-      });
+        return {
+          ...order,
+          items: cartItems.map(item => ({
+            productId: item.product.productId,
+            productName: item.product.productName,
+            productImage: item.product.productImage,
+            quantity: item.quantity,
+            productPrice: item.product.productPrice,
+            lineTotal: item.product.productPrice * item.quantity
+          })),
+          paymentMethod
+        }
+      })
 
-      // Prepare order response
-      const orderResponse = {
-        orderId: result.orderId,
-        orderAmount: result.orderAmount,
-        orderDate: result.orderDate,
-        shippingAddress: shippingAddress,
-        paymentMethod: paymentMethod,
-        items: result.orderDetails.map(detail => ({
-          productName: detail.product.productName,
-          productImage: detail.product.productImage,
-          quantity: detail.quantity,
-          productPrice: detail.productPrice,
-          lineTotal: detail.productPrice * detail.quantity
-        })),
-        totalItems: result.orderDetails.length,
-        status: paymentMethod === 'cod' ? 'confirmed_cod' : 'pending_payment'
-      };
+      console.log(`💾 Order creation: ${Date.now() - dbStart}ms`)
+      console.log(`✅ Orders POST total: ${Date.now() - startTime}ms`)
 
       const successMessage = paymentMethod === 'cod' 
         ? 'COD order created and confirmed successfully!' 
-        : 'Order created successfully. Proceed with payment.';
-
-      console.log(`✅ ${successMessage} Order ID: ${result.orderId}`);
+        : 'Order created successfully. Proceed with payment.'
 
       return res.status(201).json({ 
         success: true, 
-        order: orderResponse,
+        order: {
+          orderId: result.orderId,
+          orderAmount: result.orderAmount,
+          orderDate: result.orderDate,
+          shippingAddress: result.shippingAddress,
+          paymentMethod: result.paymentMethod,
+          items: result.items,
+          totalItems: result.items.length,
+          status: paymentMethod === 'cod' ? 'confirmed_cod' : 'pending_payment'
+        },
         message: successMessage
-      });
+      })
     }
 
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ error: 'Method not allowed' })
 
   } catch (error) {
-    console.error('💥 Orders API Error:', error);
+    console.error('💥 Orders API Error:', error)
+    console.log(`❌ Orders API failed: ${Date.now() - startTime}ms`)
     
-    // Handle specific Prisma errors
-    if (error.code === 'P2002') {
-      return res.status(400).json({ error: 'Duplicate order detected' });
-    }
-    
-    if (error.code === 'P2025') {
-      return res.status(404).json({ error: 'Referenced record not found' });
-    }
-
-    // Handle foreign key constraint errors
-    if (error.code === 'P2003') {
-      return res.status(400).json({ error: 'Invalid reference in order data' });
-    }
-
-    // Handle insufficient stock errors (if they occur at DB level)
-    if (error.message && error.message.includes('stock')) {
-      return res.status(400).json({ error: 'Insufficient stock for one or more items' });
+    if (error?.status) {
+      return res.status(error.status).json({ error: error.message })
     }
     
     return res.status(500).json({ 
-      error: 'Failed to create order',
-      details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
-    });
+      error: 'Failed to process order',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    })
   }
 }
