@@ -476,7 +476,7 @@ export default function Checkout() {
                             placeholder="Address Label (Home, Office, etc.)"
                             value={newAddress.addressLabel}
                             onChange={(e) => setNewAddress(prev => ({ ...prev, addressLabel: e.target.value }))}
-                            className="col-span-2 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
+                            className="col-span-2 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent text-gray-900 font-medium"
                             required
                           />
                           <input
@@ -484,7 +484,7 @@ export default function Checkout() {
                             placeholder="Address Line 1"
                             value={newAddress.addressLine1}
                             onChange={(e) => setNewAddress(prev => ({ ...prev, addressLine1: e.target.value }))}
-                            className="col-span-2 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
+                            className="col-span-2 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent text-gray-900 font-medium"
                             required
                           />
                           <input
@@ -492,14 +492,14 @@ export default function Checkout() {
                             placeholder="Address Line 2 (Optional)"
                             value={newAddress.addressLine2}
                             onChange={(e) => setNewAddress(prev => ({ ...prev, addressLine2: e.target.value }))}
-                            className="col-span-2 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
+                            className="col-span-2 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent text-gray-900 font-medium"
                           />
                           <input
                             type="text"
                             placeholder="City"
                             value={newAddress.city}
                             onChange={(e) => setNewAddress(prev => ({ ...prev, city: e.target.value }))}
-                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
+                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent text-gray-900 font-medium"
                             required
                           />
                           <input
@@ -507,7 +507,7 @@ export default function Checkout() {
                             placeholder="State"
                             value={newAddress.state}
                             onChange={(e) => setNewAddress(prev => ({ ...prev, state: e.target.value }))}
-                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
+                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent text-gray-900 font-medium"
                             required
                           />
                           <input
@@ -515,7 +515,7 @@ export default function Checkout() {
                             placeholder="Postal Code"
                             value={newAddress.postalCode}
                             onChange={(e) => setNewAddress(prev => ({ ...prev, postalCode: e.target.value }))}
-                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
+                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent text-gray-900 font-medium"
                             pattern="[0-9]{6}"
                             maxLength="6"
                             required
@@ -525,7 +525,7 @@ export default function Checkout() {
                             placeholder="Phone Number"
                             value={newAddress.phoneNumber}
                             onChange={(e) => setNewAddress(prev => ({ ...prev, phoneNumber: e.target.value }))}
-                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent"
+                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2F674A] focus:border-transparent text-gray-900 font-medium"
                           />
                         </div>
                         <label className="flex items-center gap-2">
