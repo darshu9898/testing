@@ -556,7 +556,7 @@ export default function Checkout() {
               </Card>
 
               {/* Section 3: Payment Method */}
-              <Card className="bg-white">
+              {/* <Card className="bg-white">
                 <CardHeader>
                   <CardTitle className="text-xl text-black flex items-center gap-2">
                     <span>💳</span> Payment Method
@@ -566,9 +566,9 @@ export default function Checkout() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
+                  <div className="space-y-3"> */}
                     {/* Razorpay */}
-                    <label className={`block p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                    {/* <label className={`block p-4 border-2 rounded-lg cursor-pointer transition-all ${
                       paymentMethod === 'razorpay' ? 'border-[#2F674A] bg-green-50' : 'border-gray-200 hover:border-gray-300'
                     }`}>
                       <input
@@ -596,10 +596,10 @@ export default function Checkout() {
                         </div>
                         <span className="text-2xl">🔒</span>
                       </div>
-                    </label>
+                    </label> */}
 
                     {/* Cash on Delivery */}
-                    <label className={`block p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                    {/* <label className={`block p-4 border-2 rounded-lg cursor-pointer transition-all ${
                       paymentMethod === 'cod' ? 'border-[#2F674A] bg-green-50' : 'border-gray-200 hover:border-gray-300'
                     }`}>
                       <input
@@ -623,10 +623,10 @@ export default function Checkout() {
                         </div>
                         <span className="text-2xl">💰</span>
                       </div>
-                    </label>
+                    </label> */}
 
                     {/* Digital Wallets */}
-                    <label className={`block p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                    {/* <label className={`block p-4 border-2 rounded-lg cursor-pointer transition-all ${
                       paymentMethod === 'wallet' ? 'border-[#2F674A] bg-green-50' : 'border-gray-200 hover:border-gray-300'
                     }`}>
                       <input
@@ -657,8 +657,8 @@ export default function Checkout() {
                     </label>
                   </div>
                 </CardContent>
-              </Card>
-            </div>
+              </Card>*/}
+            </div> 
 
             {/* Order Total Sidebar */}
             <div className="lg:col-span-1">
