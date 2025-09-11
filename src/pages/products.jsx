@@ -52,9 +52,9 @@ export default function Products() {
   }, []);
 
   // Always assign a random Picsum image for each product
-  const getRandomImage = (productId) => {
-    return `https://picsum.photos/seed/${productId}/400/300`;
-  };
+  // const getRandomImage = (productId) => {
+  //   return `https://picsum.photos/seed/${productId}/400/300`;
+  // };
 
   return (
     <>
@@ -94,10 +94,10 @@ export default function Products() {
                   <CardHeader>
                     <div className="relative h-48 mb-4">
                       <Image
-                        src={getRandomImage(product.productId)}
+                        src={product.productImage}
                         alt={product.productName}
                         fill
-                        unoptimized // skip Next.js image domain checks
+                        // unoptimized // skip Next.js image domain checks
                         className="object-cover rounded-lg"
                       />
                     </div>
