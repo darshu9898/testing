@@ -24,7 +24,7 @@ model Users {
   reviews   Reviews[]
   addresses UserAddresses[]
 
-  // Add indexes for common queries
+  // Indexes
   @@index([userEmail])
   @@index([created_at])
 }
@@ -37,17 +37,20 @@ model Products {
   productStock       Int
   productImage       String?
   created_at         DateTime       @default(now())
+  categoryId         Int?           // Optional, if you use categories
 
   // Relations
   cart         Cart[]
   orderDetails OrderDetails[]
   reviews      Reviews[]
 
-  // Add indexes for common queries
+  // Indexes
   @@index([productPrice])
   @@index([productStock])
   @@index([created_at])
-  @@index([productName]) // For search functionality
+  @@index([productName])               // For search functionality
+  @@index([productStock, created_at])  // Composite index for stock + recent products
+  @@index([categoryId])                // Optional, for category filtering
 }
 
 model Orders {
@@ -62,7 +65,7 @@ model Orders {
   orderDetails OrderDetails[]
   payments     Payments[]
 
-  // CRITICAL: Add index on foreign key
+  // Indexes
   @@index([userId])
   @@index([orderDate])
   @@index([userId, orderDate]) // Composite index for user's order history
@@ -79,7 +82,7 @@ model Cart {
   user    Users?    @relation(fields: [userId], references: [userId])
   product Products @relation(fields: [productId], references: [productId])
 
-  // CRITICAL: Add indexes on foreign keys
+  // Indexes
   @@index([userId])
   @@index([productId])
   @@index([sessionId])
@@ -99,7 +102,7 @@ model OrderDetails {
   order   Orders   @relation(fields: [orderId], references: [orderId])
   product Products @relation(fields: [productId], references: [productId])
 
-  // CRITICAL: Add indexes on foreign keys
+  // Indexes
   @@index([orderId])
   @@index([productId])
 }
@@ -109,17 +112,18 @@ model Reviews {
   userId    Int
   productId Int
   review    String
-  rating    Int?      // Consider adding rating field
+  rating    Int?
   created_at DateTime @default(now())
 
   // Relations
   user    Users    @relation(fields: [userId], references: [userId])
   product Products @relation(fields: [productId], references: [productId])
 
-  // CRITICAL: Add indexes on foreign keys
+  // Indexes
   @@index([userId])
   @@index([productId])
   @@index([productId, rating]) // For product rating queries
+  @@index([productId, created_at]) // Optional: fast fetch of recent reviews
   @@index([created_at])
 }
 
@@ -128,7 +132,7 @@ model Payments {
   userId            Int
   orderId           Int
   razorpayOrderId   String    @unique
-  razorpayPaymentId String?   // Filled after payment is successful
+  razorpayPaymentId String?
   paymentMode       String
   paymentStatus     String
   paymentDate       DateTime  @default(now())
@@ -138,7 +142,7 @@ model Payments {
   user  Users  @relation(fields: [userId], references: [userId])
   order Orders @relation(fields: [orderId], references: [orderId])
 
-  // CRITICAL: Add indexes on foreign keys
+  // Indexes
   @@index([userId])
   @@index([orderId])
   @@index([paymentStatus])
@@ -150,7 +154,7 @@ model Category {
   categoryId   Int    @id @default(autoincrement())
   categoryName String @unique
   
-  // Add index for category searches
+  // Indexes
   @@index([categoryName])
 }
 
@@ -161,9 +165,10 @@ model AdminSessions {
   created_at  DateTime @default(now())
   last_access DateTime @default(now())
 
+  // Indexes
   @@index([expires_at])
   @@index([last_access])
-  @@index([token]) // Already indexed due to @unique, but explicit for clarity
+  @@index([token])
   @@map("admin_sessions")
 }
 
@@ -185,8 +190,9 @@ model UserAddresses {
   // Relations
   user Users @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
+  // Indexes
   @@index([userId])
   @@index([isDefault])
-  @@index([city, state]) // For location-based queries
+  @@index([city, state])
   @@unique([userId, addressLabel], map: "unique_user_address_label")
 }
