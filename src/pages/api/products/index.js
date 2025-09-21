@@ -7,7 +7,6 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       console.log('📦 Products API: GET started')
-      
       const dbStart = Date.now()
       
       // Optimized query with minimal fields and efficient ordering
@@ -21,10 +20,8 @@ export default async function handler(req, res) {
           productImage: true,
           created_at: true
         },
-        orderBy: [
-          { productStock: 'desc' }, // In-stock items first
-          { created_at: 'desc' }    // Then by newest
-        ]
+        orderBy: { productId: 'desc' }, // Simple, fast ordering by primary key
+        take: 50 // Limit results for faster loading
       })
       
       console.log(`💾 Products query: ${Date.now() - dbStart}ms`)
@@ -32,20 +29,18 @@ export default async function handler(req, res) {
       
       // Cache for 2 minutes since products don't change frequently
       res.setHeader('Cache-Control', 'public, max-age=120')
-      
       return res.status(200).json(products)
     }
 
     if (req.method === 'POST') {
       console.log('📦 Products API: POST started')
-      
       const { Name, Description = '', Price, Stock = 0, Image = null } = req.body
-
+      
       // Validate required fields
       if (!Name || Price == null || isNaN(Price)) {
         return res.status(400).json({ error: 'Name and valid price are required' })
       }
-
+      
       // Validate price and stock
       const parsedPrice = parseFloat(Price)
       const parsedStock = parseInt(Stock, 10)
@@ -57,7 +52,7 @@ export default async function handler(req, res) {
       if (parsedStock < 0) {
         return res.status(400).json({ error: 'Stock cannot be negative' })
       }
-
+      
       const dbStart = Date.now()
       
       try {
@@ -82,7 +77,6 @@ export default async function handler(req, res) {
         
         console.log(`💾 Product create: ${Date.now() - dbStart}ms`)
         console.log(`✅ Products POST total: ${Date.now() - startTime}ms`)
-
         return res.status(201).json(newProduct)
         
       } catch (createError) {
@@ -100,9 +94,11 @@ export default async function handler(req, res) {
     console.error('❌ Products API Error:', error)
     console.log(`💥 Products API failed: ${Date.now() - startTime}ms`)
     
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: 'Internal Server error',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     })
+  } finally {
+    await prisma.$disconnect()
   }
 }
