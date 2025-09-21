@@ -158,7 +158,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json(result)
 
-  } catch (error) {
+  }  catch (error) {
     console.error('💥 Cart merge error:', error)
     console.log(`❌ Cart merge failed: ${Date.now() - startTime}ms`)
     
@@ -166,5 +166,8 @@ export default async function handler(req, res) {
       error: 'Failed to merge cart',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     })
+  } finally {
+    await prisma.$disconnect()
   }
+
 }
