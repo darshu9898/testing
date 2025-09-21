@@ -1,47 +1,74 @@
-// lib/getContext.js - Ultra-fast lightweight version
+// lib/getContext.js - Ultra-fast version
 import { createSupabaseServerClient } from './supabase-server'
 import prisma from './prisma'
 import { getOrSetSessionId } from './session'
 
-// Simple in-memory cache with 5-minute TTL
+// Enhanced cache with longer TTL for better performance
 const userCache = new Map()
-const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+const CACHE_TTL = 15 * 60 * 1000 // 15 minutes
 
 export async function getContext(req, res) {
   const startTime = Date.now()
   
   try {
-    // 1. Get session ID (fast)
+    // 1. Always get session ID first (this is fast)
     const sessionId = getOrSetSessionId(req, res)
 
-    // 2. Create Supabase client
-    const supabase = createSupabaseServerClient(req, res)
-
-    // 3. Get Supabase session with short timeout
-    const sessionPromise = supabase.auth.getSession()
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Auth timeout')), 1000) // 1 second only
-    )
+    // 2. Try to get auth token from cookies/headers directly (skip Supabase call)
+    const authHeader = req.headers.authorization
+    const cookieToken = req.cookies['sb-access-token'] || req.cookies['supabase-auth-token']
     
+    // If no auth indicators, return guest immediately
+    if (!authHeader && !cookieToken) {
+      console.log(`Fast guest context: ${Date.now() - startTime}ms`)
+      return {
+        user: null,
+        userId: null,
+        sessionId,
+        accessToken: null,
+        supabase: null, // Don't create Supabase client for guests
+        isAuthenticated: false
+      }
+    }
+
+    // 3. Only create Supabase client if we have auth indicators
+    const supabase = createSupabaseServerClient(req, res)
+    
+    // 4. Ultra-fast auth check with minimal timeout
     let supabaseUser = null
     let accessToken = null
     
     try {
-      const { data: { session }, error } = await Promise.race([sessionPromise, timeoutPromise])
+      // Set a very short timeout for production performance
+      const authPromise = supabase.auth.getSession()
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Auth timeout')), 300) // Only 300ms
+      )
       
-      if (session && !error) {
+      const { data: { session }, error } = await Promise.race([authPromise, timeoutPromise])
+      
+      if (session && !error && session.user) {
         supabaseUser = session.user
         accessToken = session.access_token
       }
     } catch (authError) {
-      console.log('Auth timeout or error, continuing as guest')
+      // Fail fast - if auth is slow, treat as guest
+      console.log(`Auth timeout, treating as guest: ${Date.now() - startTime}ms`)
+      return {
+        user: null,
+        userId: null,
+        sessionId,
+        accessToken: null,
+        supabase,
+        isAuthenticated: false
+      }
     }
 
-    // 4. Handle authenticated user
+    // 5. Handle authenticated user with fast lookup
     if (supabaseUser) {
-      const userId = await getUserIdFast(supabaseUser)
+      const userId = await getUserIdUltraFast(supabaseUser)
       
-      console.log(`Context: ${Date.now() - startTime}ms`)
+      console.log(`Auth context: ${Date.now() - startTime}ms`)
       
       return {
         user: supabaseUser,
@@ -53,7 +80,7 @@ export async function getContext(req, res) {
       }
     }
 
-    // 5. Return guest context
+    // 6. Fallback to guest
     console.log(`Guest context: ${Date.now() - startTime}ms`)
     return {
       user: null,
@@ -65,63 +92,59 @@ export async function getContext(req, res) {
     }
     
   } catch (error) {
-    console.error('getContext error:', error.message)
+    console.error(`Context error (${Date.now() - startTime}ms):`, error.message)
     
-    // Fallback to guest
+    // Ultra-fast fallback
     const sessionId = getOrSetSessionId(req, res)
-    const supabase = createSupabaseServerClient(req, res)
-    
     return {
       user: null,
       userId: null,
       sessionId,
       accessToken: null,
-      supabase,
+      supabase: null,
       isAuthenticated: false
     }
   }
 }
 
 /**
- * Fast user ID lookup with simple caching
+ * Ultra-fast user ID lookup with aggressive caching
  */
-async function getUserIdFast(supabaseUser) {
+async function getUserIdUltraFast(supabaseUser) {
   const cacheKey = supabaseUser.id
   const cached = userCache.get(cacheKey)
   
-  // Return cached if recent
+  // Return cached if exists (longer TTL for better performance)
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return cached.userId
   }
   
+  const dbStart = Date.now()
+  
   try {
-    // Simple database lookup - find existing user first
-    let user = await prisma.users.findUnique({
+    // Single optimized query
+    const user = await prisma.users.upsert({
       where: { supabaseId: supabaseUser.id },
+      create: {
+        supabaseId: supabaseUser.id,
+        userEmail: supabaseUser.email || '',
+        userName: supabaseUser.email?.split('@')[0] || 'User',
+      },
+      update: {}, // Don't update anything, just get the user
       select: { userId: true }
     })
     
-    // Create if doesn't exist
-    if (!user) {
-      user = await prisma.users.create({
-        data: {
-          supabaseId: supabaseUser.id,
-          userEmail: supabaseUser.email || '',
-          userName: supabaseUser.email?.split('@')[0] || 'User',
-        },
-        select: { userId: true }
-      })
-    }
+    console.log(`User lookup: ${Date.now() - dbStart}ms`)
     
-    // Cache the result
+    // Cache with longer TTL
     userCache.set(cacheKey, {
       userId: user.userId,
       timestamp: Date.now()
     })
     
-    // Simple cache cleanup (only if cache gets large)
-    if (userCache.size > 100) {
-      cleanupCache()
+    // Async cache cleanup (don't block)
+    if (userCache.size > 50) {
+      setImmediate(cleanupCache)
     }
     
     return user.userId
@@ -129,13 +152,13 @@ async function getUserIdFast(supabaseUser) {
   } catch (error) {
     console.error('User lookup failed:', error.message)
     
-    // Return cached on error if available
+    // Return cached even if expired on error
     return cached?.userId || null
   }
 }
 
 /**
- * Simple cache cleanup
+ * Async cache cleanup
  */
 function cleanupCache() {
   const now = Date.now()
@@ -148,5 +171,7 @@ function cleanupCache() {
     }
   }
   
-  console.log(`Cleaned ${cleaned} expired cache entries`)
+  if (cleaned > 0) {
+    console.log(`Cleaned ${cleaned} expired cache entries`)
+  }
 }
