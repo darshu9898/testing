@@ -2,18 +2,19 @@ import { ButtonDemo } from '@/components/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Head from 'next/head';
 import Image from 'next/image';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { useCart } from '@/contexts/CartContext';
 
 export default function Products() {
   const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const router = useRouter();
   
-  // Use CartContext instead of local cart state
   const { addToCart } = useCart();
 
-  const handleAddToCart = async (product, quantity = 1) => {
+  const handleAddToCart = useCallback(async (product, quantity = 1) => {
     try {
       const result = await addToCart(product.productId, quantity);
       
@@ -29,41 +30,102 @@ export default function Products() {
       console.error('Add to cart error:', err);
       alert('Something went wrong while adding to cart');
     }
-  };
+  }, [addToCart]);
 
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
+    const startTime = Date.now();
+    console.log('🔄 Starting product fetch...');
+    
     try {
-      const response = await fetch('/api/products', { cache: 'no-cache' });
-      if (response.ok) {
-        const data = await response.json(); // API returns an array
-        setProducts(data);
-      } else {
-        console.error('Failed to fetch products');
-        setProducts([]);
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch('/api/products', {
+        method: 'GET',
+        headers: {
+          'Cache-Control': 'max-age=300', // 5 minute cache
+        }
+      });
+      
+      console.log(`📡 API Response: ${Date.now() - startTime}ms`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
+      
+      const data = await response.json();
+      console.log(`📦 Products loaded: ${data.length} items in ${Date.now() - startTime}ms`);
+      
+      setProducts(data || []);
+      
     } catch (error) {
-      console.error('Error fetching products:', error);
+      console.error('❌ Error fetching products:', error);
+      setError(error.message);
       setProducts([]);
+    } finally {
+      setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchProducts();
-  }, []);
+  }, [fetchProducts]);
 
-  // Always assign a random Picsum image for each product
-  // const getRandomImage = (productId) => {
-  //   return `https://picsum.photos/seed/${productId}/400/300`;
-  // };
+  // Loading state
+  if (loading) {
+    return (
+      <>
+        <Head>
+          <title>Products - Trivedam</title>
+          <meta name="description" content="Discover our range of authentic Ayurvedic products" />
+        </Head>
+        <div className="pt-16 min-h-screen">
+          <div className="bg-[#2F674A] text-white py-16">
+            <div className="max-w-7xl mx-auto px-4 text-center">
+              <h1 className="text-4xl md:text-6xl font-bold mb-4">Our Products</h1>
+              <p className="text-xl md:text-2xl mb-8">Ancient Wisdom, Modern Solutions</p>
+            </div>
+          </div>
+          <div className="max-w-7xl mx-auto px-4 py-16">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#2F674A] mx-auto mb-4"></div>
+              <p className="text-gray-600">Loading products...</p>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <>
+        <Head>
+          <title>Products - Trivedam</title>
+        </Head>
+        <div className="pt-16 min-h-screen">
+          <div className="max-w-7xl mx-auto px-4 py-16">
+            <div className="text-center">
+              <p className="text-red-600 mb-4">Error loading products: {error}</p>
+              <button 
+                onClick={fetchProducts}
+                className="bg-[#2F674A] text-white px-4 py-2 rounded hover:bg-[#245c3d]"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
       <Head>
         <title>Products - Trivedam</title>
-        <meta
-          name="description"
-          content="Discover our range of authentic Ayurvedic products"
-        />
+        <meta name="description" content="Discover our range of authentic Ayurvedic products" />
       </Head>
       
       <div className="pt-16 min-h-screen">
@@ -72,11 +134,6 @@ export default function Products() {
           <div className="max-w-7xl mx-auto px-4 text-center">
             <h1 className="text-4xl md:text-6xl font-bold mb-4">Our Products</h1>
             <p className="text-xl md:text-2xl mb-8">Ancient Wisdom, Modern Solutions</p>
-            {/* <div className="bg-black bg-opacity-30 inline-block px-6 py-3 rounded-lg">
-              <p className="text-lg">
-                Trusted by <span className="font-bold">10 Lakh+</span> satisfied customers
-              </p>
-            </div> */}
           </div>
         </div>
 
@@ -92,17 +149,28 @@ export default function Products() {
                   className="bg-white hover:shadow-lg transition-shadow"
                 >
                   <CardHeader>
-                    <div className="relative h-80 mb-4">
-                      <Image
-                        src={product.productImage}
-                        alt={product.productName}
-                        fill
-                        // unoptimized // skip Next.js image domain checks
-                        className="object-cover rounded-lg"
-                      />
+                    <div className="relative h-80 mb-4 bg-gray-100 rounded-lg overflow-hidden">
+                      {product.productImage ? (
+                        <Image
+                          src={product.productImage}
+                          alt={product.productName}
+                          fill
+                          className="object-cover"
+                          placeholder="blur"
+                          blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R+i+d0+fLBfZZ7jGDvWmMEFJemRiHW5wvmAJvkxRWK8VL6/w8NwOLDOdQrnJI9q1MRpgYg5l5dPCpWm7OdUhTW0XdyLDGtY2lYTJmwQF5+hXfKIWPGFvN7APfqTcCyDwl0ld/iDDZpWrYD4faf6gQYO0qlAZEhJJjOASPeV2ZW6l9F3APnKHFBF0NkZhWAkdLJ/E/lPyZwvnAJgH9AhEJnCXSaWqCwgDCfuFfYdgHqIdvVGVOKV4/D0qV9vFi0QBgWWYm4GEfpYQ4kQRWaTyAOdTmvqmV4H7wYINwdw8nQ2DF4/VzE/9k="
+                          onError={(e) => {
+                            console.warn(`Failed to load image for ${product.productName}`);
+                            e.target.style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-gray-200 text-gray-500">
+                          No Image
+                        </div>
+                      )}
                     </div>
-                    <CardTitle>{product.productName}</CardTitle>
-                    <CardDescription>{product.productDescription}</CardDescription>
+                    <CardTitle className="line-clamp-2">{product.productName}</CardTitle>
+                    <CardDescription className="line-clamp-3">{product.productDescription}</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="flex justify-between items-center">
@@ -126,78 +194,17 @@ export default function Products() {
               ))}
             </div>
           ) : (
-            <p className="text-center text-gray-600">No products available.</p>
+            <div className="text-center py-12">
+              <p className="text-gray-600 text-lg mb-4">No products available at the moment.</p>
+              <button 
+                onClick={fetchProducts}
+                className="bg-[#2F674A] text-white px-6 py-2 rounded hover:bg-[#245c3d]"
+              >
+                Refresh
+              </button>
+            </div>
           )}
         </div>
-
-        {/* Featured Section
-        <div className="max-w-7xl mx-auto px-4 mt-16">
-          <h2 className="text-3xl font-bold text-center mb-12 text-black">
-            Featured Combos
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 text-gray-900">
-            {[
-              {
-                name: 'Ultimate Hair Care Combo',
-                price: '₹899',
-                originalPrice: '₹1199',
-                image: '/combo.jpg',
-              },
-              {
-                name: 'Skin Glow Package',
-                price: '₹749',
-                originalPrice: '₹999',
-                image: '/product.png',
-              },
-              {
-                name: 'Wellness Starter Kit',
-                price: '₹1299',
-                originalPrice: '₹1599',
-                image: '/combo.jpg',
-              },
-            ].map((product, index) => (
-              <Card
-                key={index}
-                className="bg-white hover:shadow-lg transition-shadow"
-              >
-                <CardHeader>
-                  <div className="relative h-48 mb-4">
-                    <Image
-                      src={product.image}
-                      alt={product.name}
-                      fill
-                      className="object-cover rounded-lg"
-                    />
-                    <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded-full text-sm font-bold">
-                      SALE
-                    </div>
-                  </div>
-                  <CardTitle>{product.name}</CardTitle>
-                  <CardDescription>
-                    Complete solution for your needs
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex justify-between items-center mb-4">
-                    <div>
-                      <span className="text-2xl font-bold text-[#2F674A]">
-                        {product.price}
-                      </span>
-                      <span className="text-gray-500 line-through ml-2">
-                        {product.originalPrice}
-                      </span>
-                    </div>
-                  </div>
-                  <ButtonDemo
-                    label="Buy Now"
-                    bgColor="green"
-                    onClick={() => router.push('/cart')}
-                  />
-                </CardContent>
-              </Card>
-            ))}
-          </div> */}
-        {/* </div> */}
       </div>
     </>
   );
