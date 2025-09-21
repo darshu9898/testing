@@ -1,4 +1,4 @@
-// src/pages/api/cart/index.js - Ultra-optimized version
+// src/pages/api/cart/index.js - Fixed version (remove disconnect)
 import { getContext } from '@/lib/getContext'
 import prisma from "@/lib/prisma"
 
@@ -186,8 +186,6 @@ export default async function handler(req, res) {
       return res.status(err.status).json({ error: err.message })
     }
     return res.status(500).json({ error: 'Internal server error' })
-  } finally {
-    await prisma.$disconnect()
   }
-
+  // REMOVED: Don't disconnect Prisma - let connection pool handle it
 }
