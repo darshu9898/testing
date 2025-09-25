@@ -40,13 +40,21 @@ export default function Products() {
       setLoading(true);
       setError(null);
       
+      // Optimized fetch with better caching and timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+      
       const response = await fetch('/api/products', {
         method: 'GET',
         headers: {
-          'Cache-Control': 'max-age=300', // 5 minute cache
-        }
+          'Cache-Control': 'max-age=300, stale-while-revalidate=60',
+        },
+        signal: controller.signal,
+        // Add keep-alive for better connection reuse
+        keepalive: true
       });
       
+      clearTimeout(timeoutId);
       console.log(`📡 API Response: ${Date.now() - startTime}ms`);
       
       if (!response.ok) {
@@ -59,8 +67,12 @@ export default function Products() {
       setProducts(data || []);
       
     } catch (error) {
-      console.error('❌ Error fetching products:', error);
-      setError(error.message);
+      if (error.name === 'AbortError') {
+        setError('Request timed out. Please try again.');
+      } else {
+        console.error('❌ Error fetching products:', error);
+        setError(error.message);
+      }
       setProducts([]);
     } finally {
       setLoading(false);
@@ -71,7 +83,7 @@ export default function Products() {
     fetchProducts();
   }, [fetchProducts]);
 
-  // Loading state
+  // Loading state with skeleton
   if (loading) {
     return (
       <>
@@ -87,9 +99,23 @@ export default function Products() {
             </div>
           </div>
           <div className="max-w-7xl mx-auto px-4 py-16">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#2F674A] mx-auto mb-4"></div>
-              <p className="text-gray-600">Loading products...</p>
+            <h2 className="text-3xl font-bold text-center mb-12 text-black">All Products</h2>
+            
+            {/* Loading Skeleton */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="bg-white rounded-lg shadow-md animate-pulse">
+                  <div className="h-80 bg-gray-300 rounded-t-lg"></div>
+                  <div className="p-6">
+                    <div className="h-4 bg-gray-300 rounded mb-2"></div>
+                    <div className="h-4 bg-gray-300 rounded mb-4 w-3/4"></div>
+                    <div className="flex justify-between items-center">
+                      <div className="h-6 bg-gray-300 rounded w-16"></div>
+                      <div className="h-8 bg-gray-300 rounded w-20"></div>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -105,12 +131,18 @@ export default function Products() {
           <title>Products - Trivedam</title>
         </Head>
         <div className="pt-16 min-h-screen">
+          <div className="bg-[#2F674A] text-white py-16">
+            <div className="max-w-7xl mx-auto px-4 text-center">
+              <h1 className="text-4xl md:text-6xl font-bold mb-4">Our Products</h1>
+              <p className="text-xl md:text-2xl mb-8">Ancient Wisdom, Modern Solutions</p>
+            </div>
+          </div>
           <div className="max-w-7xl mx-auto px-4 py-16">
             <div className="text-center">
               <p className="text-red-600 mb-4">Error loading products: {error}</p>
               <button 
                 onClick={fetchProducts}
-                className="bg-[#2F674A] text-white px-4 py-2 rounded hover:bg-[#245c3d]"
+                className="bg-[#2F674A] text-white px-4 py-2 rounded hover:bg-[#245c3d] transition-colors"
               >
                 Retry
               </button>
@@ -126,6 +158,7 @@ export default function Products() {
       <Head>
         <title>Products - Trivedam</title>
         <meta name="description" content="Discover our range of authentic Ayurvedic products" />
+        <link rel="preload" href="/api/products" as="fetch" crossOrigin="anonymous" />
       </Head>
       
       <div className="pt-16 min-h-screen">
@@ -146,7 +179,7 @@ export default function Products() {
               {products.map((product) => (
                 <Card
                   key={product.productId}
-                  className="bg-white hover:shadow-lg transition-shadow"
+                  className="bg-white hover:shadow-lg transition-shadow duration-200"
                 >
                   <CardHeader>
                     <div className="relative h-80 mb-4 bg-gray-100 rounded-lg overflow-hidden">
@@ -155,9 +188,11 @@ export default function Products() {
                           src={product.productImage}
                           alt={product.productName}
                           fill
-                          className="object-cover"
+                          className="object-cover transition-transform duration-200 hover:scale-105"
+                          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                           placeholder="blur"
                           blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R+i+d0+fLBfZZ7jGDvWmMEFJemRiHW5wvmAJvkxRWK8VL6/w8NwOLDOdQrnJI9q1MRpgYg5l5dPCpWm7OdUhTW0XdyLDGtY2lYTJmwQF5+hXfKIWPGFvN7APfqTcCyDwl0ld/iDDZpWrYD4faf6gQYO0qlAZEhJJjOASPeV2ZW6l9F3APnKHFBF0NkZhWAkdLJ/E/lPyZwvnAJgH9AhEJnCXSaWqCwgDCfuFfYdgHqIdvVGVOKV4/D0qV9vFi0QBgWWYm4GEfpYQ4kQRWaTyAOdTmvqmV4H7wYINwdw8nQ2DF4/VzE/9k="
+                          loading="lazy"
                           onError={(e) => {
                             console.warn(`Failed to load image for ${product.productName}`);
                             e.target.style.display = 'none';
@@ -198,7 +233,7 @@ export default function Products() {
               <p className="text-gray-600 text-lg mb-4">No products available at the moment.</p>
               <button 
                 onClick={fetchProducts}
-                className="bg-[#2F674A] text-white px-6 py-2 rounded hover:bg-[#245c3d]"
+                className="bg-[#2F674A] text-white px-6 py-2 rounded hover:bg-[#245c3d] transition-colors"
               >
                 Refresh
               </button>

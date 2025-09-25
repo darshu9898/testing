@@ -1,4 +1,4 @@
-// src/pages/api/products/index.js - Fixed version
+// pages/api/products/index.js - Optimized version
 import prisma from '@/lib/prisma'
 
 export default async function handler(req, res) {
@@ -8,12 +8,13 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       console.log('📦 Products API: GET started')
       
-      // Set cache headers BEFORE database query
-      res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=60')
+      // Set aggressive caching headers
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=600, stale-while-revalidate=86400')
+      res.setHeader('CDN-Cache-Control', 'max-age=600')
       
       const dbStart = Date.now()
       
-      // Ultra-fast query with only essential fields
+      // Optimized query - only essential fields, with database-level filtering
       const products = await prisma.products.findMany({
         select: {
           productId: true,
@@ -25,13 +26,13 @@ export default async function handler(req, res) {
         },
         where: {
           productStock: {
-            gte: 0 // Only show products that exist
+            gt: 0 // Only products with stock > 0
           }
         },
-        orderBy: { 
-          productId: 'desc' 
+        orderBy: {
+          productId: 'desc' // Most recent first
         },
-        take: 50 // Limit for faster loading
+        take: 24 // Limit to 24 products for faster loading
       })
       
       console.log(`💾 Database query: ${Date.now() - dbStart}ms`)
@@ -40,10 +41,11 @@ export default async function handler(req, res) {
       
       return res.status(200).json(products)
     }
-
+    
     if (req.method === 'POST') {
       const { Name, Description = '', Price, Stock = 0, Image = null } = req.body
       
+      // Validation
       if (!Name || Price == null || isNaN(Price)) {
         return res.status(400).json({ error: 'Name and valid price are required' })
       }
@@ -67,7 +69,6 @@ export default async function handler(req, res) {
         })
         
         return res.status(201).json(newProduct)
-        
       } catch (createError) {
         if (createError.code === 'P2002') {
           return res.status(400).json({ error: 'Product name already exists' })
@@ -75,15 +76,14 @@ export default async function handler(req, res) {
         throw createError
       }
     }
-
+    
     return res.status(405).json({ error: 'Method not allowed' })
-
+    
   } catch (error) {
     console.error('❌ Products API Error:', error)
     return res.status(500).json({
-      error: 'Internal Server error',
+      error: 'Internal server error',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     })
   }
-  // REMOVED: Don't disconnect Prisma - let connection pool handle it
 }
